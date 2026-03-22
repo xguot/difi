@@ -58,39 +58,49 @@ func GetRepoName() string {
 	return "Repo"
 }
 
-func ListChangedFiles(targetBranch string) ([]string, error) {
-	var cmd *exec.Cmd
-	if targetBranch == "tip" || targetBranch == "." || targetBranch == "" {
-		cmd = hgCmd("status", "--no-status")
-	} else {
-		cmd = hgCmd("status", "--rev", targetBranch, "--no-status")
-	}
-
-	out, err := cmd.Output()
+func ListChangedFiles(target string) ([]string, error) {
+	// m: modified, a: added, r: removed, d: deleted
+	out, err := hgCmd("status", "--rev", target, "-mard", "--no-status").Output()
 	if err != nil {
 		return nil, err
 	}
-	files := strings.Split(strings.TrimSpace(string(out)), "\n")
-	if len(files) == 1 && files[0] == "" {
-		return []string{}, nil
+
+	// u: unknown (untracked)
+	untracked, err := hgCmd("status", "--unknown", "--no-status").Output()
+	if err != nil {
+		return nil, err
+	}
+
+	seen := make(map[string]bool)
+	var files []string
+
+	all := string(out) + "\n" + string(untracked)
+	for _, line := range strings.Split(strings.TrimSpace(all), "\n") {
+		f := strings.TrimSpace(line)
+		if f != "" && !seen[f] {
+			seen[f] = true
+			files = append(files, f)
+		}
 	}
 	return files, nil
 }
 
-func DiffCmd(targetBranch, path string) tea.Cmd {
+func DiffCmd(target, path string) tea.Cmd {
 	return func() tea.Msg {
-		var cmd *exec.Cmd
-		if targetBranch == "tip" || targetBranch == "." || targetBranch == "" {
-			cmd = hgCmd("diff", "--color=always", path)
-		} else {
-			cmd = hgCmd("diff", "--color=always", "--rev", targetBranch, path)
+		out, err := hgCmd("diff", "--change", target, path).Output()
+		if err != nil {
+			return DiffMsg{Content: "Error: " + err.Error()}
 		}
 
-		out, err := cmd.Output()
-		if err != nil {
-			return DiffMsg{Content: "Error fetching diff: " + err.Error()}
+		content := string(out)
+		if content == "" {
+			if _, err := os.Stat(path); err == nil {
+				/* diff untracked file as full addition */
+				out, _ = exec.Command("hg", "diff", "--git", "/dev/null", path).Output()
+				content = string(out)
+			}
 		}
-		return DiffMsg{Content: string(out)}
+		return DiffMsg{Content: content}
 	}
 }
 

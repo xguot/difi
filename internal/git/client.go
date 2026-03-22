@@ -43,15 +43,28 @@ func GetRepoName() string {
 }
 
 func ListChangedFiles(targetBranch string) ([]string, error) {
-	cmd := gitCmd("diff", "--name-only", targetBranch)
-	out, err := cmd.Output()
+	out, err := gitCmd("diff", "--name-only", targetBranch).Output()
 	if err != nil {
 		return nil, err
 	}
-	files := strings.Split(strings.TrimSpace(string(out)), "\n")
-	if len(files) == 1 && files[0] == "" {
-		return []string{}, nil
+
+	untracked, err := gitCmd("ls-files", "--others", "--exclude-standard").Output()
+	if err != nil {
+		return nil, err
 	}
+
+	seen := make(map[string]bool)
+	var files []string
+
+	allOutput := string(out) + "\n" + string(untracked)
+	for _, line := range strings.Split(strings.TrimSpace(allOutput), "\n") {
+		f := strings.TrimSpace(line)
+		if f != "" && !seen[f] {
+			seen[f] = true
+			files = append(files, f)
+		}
+	}
+
 	return files, nil
 }
 
@@ -61,7 +74,16 @@ func DiffCmd(targetBranch, path string) tea.Cmd {
 		if err != nil {
 			return DiffMsg{Content: "Error fetching diff: " + err.Error()}
 		}
-		return DiffMsg{Content: string(out)}
+
+		content := string(out)
+		if content == "" {
+			if _, err := os.Stat(path); err == nil {
+				out, _ = exec.Command("git", "diff", "--color=always", "--no-index", "/dev/null", path).Output()
+				content = string(out)
+			}
+		}
+
+		return DiffMsg{Content: content}
 	}
 }
 
