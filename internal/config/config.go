@@ -15,6 +15,8 @@ type Config struct {
 type UIConfig struct {
 	LineNumbers string `yaml:"line_numbers"`
 	Theme       string `yaml:"theme"`
+	DiffAddBg   string `yaml:"diff_add_bg"`
+	DiffDelBg   string `yaml:"diff_del_bg"`
 }
 
 func Load() Config {

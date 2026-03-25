@@ -3,10 +3,12 @@ package ui
 import (
 	"fmt"
 	"math"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 
+	"github.com/alecthomas/chroma/v2/quick"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -25,8 +27,8 @@ const (
 	FocusDiff
 )
 
-// ansiRe matches ANSI escape sequences for stripping from terminal output.
 var ansiRe = regexp.MustCompile("[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[a-zA-Z\\d]*)*)?\u0007)|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PRZcf-ntqry=><~]))")
+var bgAnsiRe = regexp.MustCompile(`\x1b\[48;2;\d+;\d+;\d+m|\x1b\[4[0-9]m`)
 
 type StatsMsg struct {
 	Added   int
@@ -51,11 +53,14 @@ type Model struct {
 	currentFileAdded   int
 	currentFileDeleted int
 
-	fileStats map[string][2]int // per-file [added, deleted]
+	fileStats map[string][2]int
 
-	diffContent string
-	diffLines   []string
-	diffCursor  int
+	diffContent     string
+	diffLines       []string
+	diffHighlighted []string
+	diffCursor      int
+	visualMode      bool // Visual selection mode
+	visualStart     int  // Anchor for visual selection
 
 	inputBuffer string
 	pendingZ    bool
@@ -87,7 +92,6 @@ func NewModel(cfg config.Config, targetBranch string, pipedDiff string, vcsClien
 	}
 
 	l := list.New(items, delegate, 0, 0)
-
 	l.SetShowTitle(false)
 	l.SetShowHelp(false)
 	l.SetShowStatusBar(false)
@@ -109,9 +113,10 @@ func NewModel(cfg config.Config, targetBranch string, pipedDiff string, vcsClien
 		pendingZ:      false,
 		pipedDiff:     pipedDiff,
 		vcs:           vcsClient,
+		visualMode:    false,
+		visualStart:   0,
 	}
 
-	// Find the first file (not directory) to select initially
 	for idx, item := range items {
 		if ti, ok := item.(tree.TreeItem); ok && !ti.IsDir {
 			m.selectedPath = ti.FullPath
@@ -164,14 +169,11 @@ func (m Model) computePipedStatsCmd() tea.Cmd {
 		for _, line := range strings.Split(m.pipedDiff, "\n") {
 			clean := stripAnsi(line)
 			if strings.HasPrefix(clean, "diff --git ") {
-				// git format: "diff --git a/path b/path"
 				parts := strings.Fields(clean)
 				if len(parts) >= 4 {
 					currentFile = strings.TrimPrefix(parts[3], "b/")
 				}
 			} else if strings.HasPrefix(clean, "diff -r ") {
-				// hg format: "diff -r <rev> <file>" or "diff -r <rev1> -r <rev2> <file>"
-				// The file path is always the last whitespace-separated field.
 				parts := strings.Fields(clean)
 				if len(parts) >= 3 {
 					currentFile = parts[len(parts)-1]
@@ -241,13 +243,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case "z", ".":
 					m.centerDiffCursor()
 				case "t":
-					m.diffViewport.SetYOffset(m.diffCursor)
+					m.setYOffset(m.diffCursor)
 				case "b":
-					offset := m.diffCursor - m.diffViewport.Height + 1
-					if offset < 0 {
-						offset = 0
-					}
-					m.diffViewport.SetYOffset(offset)
+					m.setYOffset(m.diffCursor - m.diffViewport.Height + 1)
 				}
 			}
 			return m, nil
@@ -265,7 +263,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		switch msg.String() {
+		case "V":
+			if m.focus == FocusDiff {
+				m.visualMode = !m.visualMode
+				if m.visualMode {
+					m.visualStart = m.diffCursor
+				}
+			}
+			m.inputBuffer = ""
+
+		case "esc":
+			m.visualMode = false
+			m.inputBuffer = ""
+
 		case "tab":
+			m.visualMode = false
 			if m.focus == FocusTree {
 				if item, ok := m.fileList.SelectedItem().(tree.TreeItem); ok && item.IsDir {
 					return m, nil
@@ -277,7 +289,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.updateTreeFocus()
 			m.inputBuffer = ""
 
-		case "l", "]", "ctrl+l", "right":
+		case "ctrl+h", "[":
+			m.visualMode = false
+			m.focus = FocusTree
+			m.updateTreeFocus()
+			m.inputBuffer = ""
+
+		case "ctrl+l", "]":
+			m.visualMode = false
 			if m.focus == FocusTree {
 				if item, ok := m.fileList.SelectedItem().(tree.TreeItem); ok && item.IsDir {
 					return m, nil
@@ -287,30 +306,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.updateTreeFocus()
 			m.inputBuffer = ""
 
-		case "h", "[", "ctrl+h", "left":
+		case "h", "left":
+			m.visualMode = false
+			keyHandled = true
 			m.focus = FocusTree
 			m.updateTreeFocus()
 			m.inputBuffer = ""
 
-		case "enter":
-			if m.focus == FocusTree {
+		case "l", "right":
+			m.visualMode = false
+			keyHandled = true
+			if item, ok := m.fileList.SelectedItem().(tree.TreeItem); ok && item.IsDir {
+				return m, nil
+			}
+			m.focus = FocusDiff
+			m.updateTreeFocus()
+			m.inputBuffer = ""
+
+		case "enter", "e":
+			m.visualMode = false
+			if m.focus == FocusTree && msg.String() == "enter" {
 				if i, ok := m.fileList.SelectedItem().(tree.TreeItem); ok && i.IsDir {
 					m.treeState.ToggleExpand(i.FullPath)
 					m.fileList.SetItems(m.treeState.Items())
 					return m, nil
 				}
 			}
-			if m.selectedPath != "" {
-				line := 0
-				if m.focus == FocusDiff {
-					line = m.vcs.CalculateFileLine(m.diffContent, m.diffCursor)
-				} else {
-					line = m.vcs.CalculateFileLine(m.diffContent, 0)
-				}
-				return m, m.vcs.OpenEditorCmd(m.selectedPath, line, m.targetBranch, m.treeDelegate.Config.Editor)
-			}
 
-		case "e":
 			if m.selectedPath != "" {
 				if i, ok := m.fileList.SelectedItem().(tree.TreeItem); ok && i.IsDir {
 					return m, nil
@@ -334,62 +356,43 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "H":
 			if m.focus == FocusDiff {
-				m.diffCursor = m.diffViewport.YOffset
-				if m.diffCursor >= len(m.diffLines) {
-					m.diffCursor = len(m.diffLines) - 1
-				}
+				m.diffCursor = m.snapCursor(m.diffViewport.YOffset, 1)
 			}
 
 		case "M":
 			if m.focus == FocusDiff {
 				half := m.diffViewport.Height / 2
-				m.diffCursor = m.diffViewport.YOffset + half
-				if m.diffCursor >= len(m.diffLines) {
-					m.diffCursor = len(m.diffLines) - 1
-				}
+				m.diffCursor = m.snapCursor(m.diffViewport.YOffset+half, 1)
 			}
 
 		case "L":
 			if m.focus == FocusDiff {
-				m.diffCursor = m.diffViewport.YOffset + m.diffViewport.Height - 1
-				if m.diffCursor >= len(m.diffLines) {
-					m.diffCursor = len(m.diffLines) - 1
-				}
+				end := m.diffViewport.YOffset + m.diffViewport.Height - 1
+				m.diffCursor = m.snapCursor(end, -1)
 			}
 
 		case "ctrl+d":
 			if m.focus == FocusDiff {
-				halfScreen := m.diffViewport.Height / 2
-				m.diffCursor += halfScreen
-				if m.diffCursor >= len(m.diffLines) {
-					m.diffCursor = len(m.diffLines) - 1
-				}
+				target := m.diffCursor + m.diffViewport.Height/2
+				m.diffCursor = m.snapCursor(target, 1)
 				m.centerDiffCursor()
 			}
 			m.inputBuffer = ""
 
 		case "ctrl+u":
 			if m.focus == FocusDiff {
-				halfScreen := m.diffViewport.Height / 2
-				m.diffCursor -= halfScreen
-				if m.diffCursor < 0 {
-					m.diffCursor = 0
-				}
+				target := m.diffCursor - m.diffViewport.Height/2
+				m.diffCursor = m.snapCursor(target, -1)
 				m.centerDiffCursor()
 			}
 			m.inputBuffer = ""
 
 		case "j", "down":
 			keyHandled = true
-			count := m.getRepeatCount()
-			for i := 0; i < count; i++ {
+			for i := 0; i < m.getRepeatCount(); i++ {
 				if m.focus == FocusDiff {
-					if m.diffCursor < len(m.diffLines)-1 {
-						m.diffCursor++
-						if m.diffCursor >= m.diffViewport.YOffset+m.diffViewport.Height {
-							m.diffViewport.LineDown(1)
-						}
-					}
+					m.diffCursor = m.snapCursor(m.diffCursor+1, 1)
+					m.handleScrolling()
 				} else {
 					m.fileList.CursorDown()
 				}
@@ -398,20 +401,39 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "k", "up":
 			keyHandled = true
-			count := m.getRepeatCount()
-			for i := 0; i < count; i++ {
+			for i := 0; i < m.getRepeatCount(); i++ {
 				if m.focus == FocusDiff {
-					if m.diffCursor > 0 {
-						m.diffCursor--
-						if m.diffCursor < m.diffViewport.YOffset {
-							m.diffViewport.LineUp(1)
-						}
-					}
+					m.diffCursor = m.snapCursor(m.diffCursor-1, -1)
+					m.handleScrolling()
 				} else {
 					m.fileList.CursorUp()
 				}
 			}
 			m.inputBuffer = ""
+
+		case "g":
+			if m.focus == FocusDiff {
+				if m.inputBuffer == "g" {
+					m.diffCursor = m.snapCursor(0, 1)
+					m.setYOffset(m.diffCursor)
+					m.inputBuffer = ""
+				} else {
+					m.inputBuffer = "g"
+				}
+			}
+
+		case "G":
+			if m.focus == FocusDiff {
+				count, err := strconv.Atoi(m.inputBuffer)
+				if err == nil && count > 0 {
+					target := count - 1
+					m.diffCursor = m.snapCursor(target, 1)
+				} else {
+					m.diffCursor = m.snapCursor(len(m.diffLines)-1, -1)
+				}
+				m.setYOffset(m.diffCursor - m.diffViewport.Height + 1)
+				m.inputBuffer = ""
+			}
 
 		default:
 			m.inputBuffer = ""
@@ -428,6 +450,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !item.IsDir && item.FullPath != m.selectedPath {
 				m.selectedPath = item.FullPath
 				m.diffCursor = 0
+				m.visualMode = false
 				m.diffViewport.GotoTop()
 				if m.pipedDiff != "" {
 					cmds = append(cmds, func() tea.Msg {
@@ -443,10 +466,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case vcs.DiffMsg:
 		fullLines := strings.Split(msg.Content, "\n")
-
-		var cleanLines []string
+		var cleanLines, hlLines []string
 		var added, deleted int
 		foundHunk := false
+
+		ext := filepath.Ext(m.selectedPath)
+		if len(ext) > 0 {
+			ext = ext[1:]
+		} else {
+			ext = "txt"
+		}
+
+		isGitTheme := m.treeDelegate.Config.UI.Theme == "git"
 
 		for _, line := range fullLines {
 			cleanLine := stripAnsi(line)
@@ -461,21 +492,38 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			cleanLines = append(cleanLines, line)
 
-			if strings.HasPrefix(cleanLine, "+") && !strings.HasPrefix(cleanLine, "+++") {
+			isAdd := strings.HasPrefix(cleanLine, "+") && !strings.HasPrefix(cleanLine, "+++")
+			isDel := strings.HasPrefix(cleanLine, "-") && !strings.HasPrefix(cleanLine, "---")
+
+			if isAdd {
 				added++
-			} else if strings.HasPrefix(cleanLine, "-") && !strings.HasPrefix(cleanLine, "---") {
+			} else if isDel {
 				deleted++
+			}
+
+			codeContent := cleanLine
+			if len(codeContent) > 0 && (isAdd || isDel || strings.HasPrefix(codeContent, " ")) {
+				codeContent = codeContent[1:]
+			}
+
+			if isGitTheme {
+				hlLines = append(hlLines, codeContent)
+			} else {
+				var buf strings.Builder
+				err := quick.Highlight(&buf, codeContent, ext, "terminal16m", "nord")
+				if err == nil && buf.String() != "" {
+					hlLines = append(hlLines, strings.TrimSuffix(buf.String(), "\n"))
+				} else {
+					hlLines = append(hlLines, codeContent)
+				}
 			}
 		}
 
 		m.diffLines = cleanLines
+		m.diffHighlighted = hlLines
 		m.currentFileAdded = added
 		m.currentFileDeleted = deleted
-
-		newContent := strings.Join(cleanLines, "\n")
-		m.diffContent = newContent
-		m.diffViewport.SetContent(newContent)
-		m.diffViewport.GotoTop()
+		m.diffCursor = m.snapCursor(0, 1) // Ensure we start on a visible line
 
 	case vcs.EditorFinishedMsg:
 		if m.pipedDiff != "" {
@@ -489,13 +537,52 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m *Model) centerDiffCursor() {
-	halfScreen := m.diffViewport.Height / 2
-	targetOffset := m.diffCursor - halfScreen
-	if targetOffset < 0 {
-		targetOffset = 0
+// snapCursor prevents highlight vanishing by snapping to non-metadata lines.
+func (m *Model) snapCursor(idx int, dir int) int {
+	if len(m.diffLines) == 0 {
+		return 0
 	}
-	m.diffViewport.SetYOffset(targetOffset)
+
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= len(m.diffLines) {
+		idx = len(m.diffLines) - 1
+	}
+
+	curr := idx
+	for curr >= 0 && curr < len(m.diffLines) {
+		cleanLine := stripAnsi(m.diffLines[curr])
+		if !isDiffMetadata(cleanLine) {
+			return curr
+		}
+		curr += dir
+	}
+
+	// 3. Fallback: if we hit a boundary, scan in the reverse direction
+	curr = idx
+	for curr >= 0 && curr < len(m.diffLines) {
+		cleanLine := stripAnsi(m.diffLines[curr])
+		if !isDiffMetadata(cleanLine) {
+			return curr
+		}
+		curr -= dir
+	}
+
+	return m.diffCursor
+}
+
+func (m *Model) handleScrolling() {
+	if m.diffCursor < m.diffViewport.YOffset {
+		m.setYOffset(m.diffCursor)
+	} else if m.diffCursor >= m.diffViewport.YOffset+m.diffViewport.Height {
+		m.setYOffset(m.diffCursor - m.diffViewport.Height + 1)
+	}
+}
+
+func (m *Model) centerDiffCursor() {
+	targetOffset := m.diffCursor - (m.diffViewport.Height / 2)
+	m.setYOffset(targetOffset)
 }
 
 func (m *Model) updateSizes() {
@@ -514,7 +601,6 @@ func (m *Model) updateSizes() {
 		treeWidth = 20
 	}
 
-	// PaneStyle has RoundedBorder (2 cols) + Padding(0,1) (2 cols) = 4 cols overhead
 	treePaneOverhead := 4
 	treeInnerWidth := treeWidth - treePaneOverhead
 	if treeInnerWidth < 10 {
@@ -563,7 +649,7 @@ func (m Model) View() string {
 		treeView := treeStyle.Copy().
 			Width(m.fileList.Width()).
 			Height(m.fileList.Height()).
-			MaxHeight(m.fileList.Height() + 2). // cap height: content + border
+			MaxHeight(m.fileList.Height() + 2).
 			Render(m.fileList.View())
 
 		var rightPaneView string
@@ -586,34 +672,61 @@ func (m Model) View() string {
 				maxLineWidth = 1
 			}
 
+			isGitTheme := m.treeDelegate.Config.UI.Theme == "git"
+
 			for i := start; i < end; i++ {
 				rawLine := m.diffLines[i]
 				cleanLine := stripAnsi(rawLine)
-				line := ansi.Truncate(rawLine, maxLineWidth, "")
 
-				if strings.HasPrefix(cleanLine, "diff --git") ||
-					strings.HasPrefix(cleanLine, "diff -r ") ||
-					strings.HasPrefix(cleanLine, "index ") ||
-					strings.HasPrefix(cleanLine, "new file mode") ||
-					strings.HasPrefix(cleanLine, "old mode") ||
-					strings.HasPrefix(cleanLine, "--- a/") ||
-					strings.HasPrefix(cleanLine, "--- /dev/") ||
-					strings.HasPrefix(cleanLine, "+++ b/") ||
-					strings.HasPrefix(cleanLine, "+++ /dev/") {
+				if isDiffMetadata(cleanLine) {
+					if end < len(m.diffLines) {
+						end++
+					}
 					continue
 				}
 
-				if strings.HasPrefix(cleanLine, "@@") {
-					continue
+				isAdd := strings.HasPrefix(cleanLine, "+")
+				isDel := strings.HasPrefix(cleanLine, "-")
+
+				codeContent := cleanLine
+				if len(codeContent) > 0 && (isAdd || isDel || strings.HasPrefix(codeContent, " ")) {
+					codeContent = codeContent[1:]
+				}
+
+				// Active line evaluation handles both single cursor and Visual Mode
+				isCursor := false
+				if m.focus == FocusDiff {
+					if m.visualMode {
+						minIdx, maxIdx := m.visualStart, m.diffCursor
+						if minIdx > maxIdx {
+							minIdx, maxIdx = maxIdx, minIdx
+						}
+						isCursor = (i >= minIdx && i <= maxIdx)
+					} else {
+						isCursor = (i == m.diffCursor)
+					}
+				}
+
+				separator := "│"
+				if isCursor {
+					separator = "┃"
+				}
+
+				var gutterStr string
+				if isAdd {
+					gutterStr = "+ " + separator + " "
+				} else if isDel {
+					gutterStr = "- " + separator + " "
+				} else {
+					gutterStr = "  " + separator + " "
 				}
 
 				var numStr string
 				mode := "relative"
 
 				if mode != "hidden" {
-					isCursor := (i == m.diffCursor)
 					if isCursor && mode == "hybrid" {
-						realLine := m.vcs.CalculateFileLine(m.diffContent, m.diffCursor)
+						realLine := m.vcs.CalculateFileLine(m.diffContent, m.diffCursor) // always anchor to actual cursor
 						numStr = fmt.Sprintf("%d", realLine)
 					} else if isCursor && mode == "relative" {
 						numStr = "0"
@@ -630,10 +743,57 @@ func (m Model) View() string {
 					lineNumRendered = LineNumberStyle.Render(numStr)
 				}
 
-				if m.focus == FocusDiff && i == m.diffCursor {
-					line = DiffSelectionStyle.Render("  " + cleanLine)
+				var line string
+
+				if isCursor {
+					fullStr := gutterStr + ansi.Truncate(codeContent, maxLineWidth-4, "")
+
+					visibleLen := lipgloss.Width(fullStr)
+					padLen := maxLineWidth - visibleLen
+					if padLen > 0 {
+						fullStr += strings.Repeat(" ", padLen)
+					}
+
+					if isAdd {
+						line = CursorAddStyle.Copy().Width(maxLineWidth).Render(fullStr)
+					} else if isDel {
+						line = CursorDelStyle.Copy().Width(maxLineWidth).Render(fullStr)
+					} else {
+						line = CursorNormalStyle.Copy().Width(maxLineWidth).Render(fullStr)
+					}
 				} else {
-					line = "  " + line
+					var hlCode string
+					var gutter string
+
+					if isGitTheme {
+						if isAdd {
+							hlCode = lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render(codeContent)
+							gutter = lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render(gutterStr)
+						} else if isDel {
+							hlCode = lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Render(codeContent)
+							gutter = lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Render(gutterStr)
+						} else {
+							hlCode = codeContent
+							gutter = DiffCtxGutter.Render(gutterStr)
+						}
+					} else {
+						if i < len(m.diffHighlighted) {
+							hlCode = m.diffHighlighted[i]
+							hlCode = bgAnsiRe.ReplaceAllString(hlCode, "")
+						}
+
+						if isAdd {
+							gutter = DiffAddGutter.Render(gutterStr)
+						} else if isDel {
+							gutter = DiffDelGutter.Render(gutterStr)
+						} else {
+							gutter = DiffCtxGutter.Render(gutterStr)
+						}
+					}
+
+					hlCode = ansi.Truncate(hlCode, maxLineWidth-4, "")
+
+					line = gutter + hlCode
 				}
 
 				renderedDiff.WriteString(lineNumRendered + line + "\n")
@@ -641,12 +801,10 @@ func (m Model) View() string {
 
 			diffContentStr := "\n" + strings.TrimRight(renderedDiff.String(), "\n")
 
-			diffView := DiffStyle.Copy().
+			rightPaneView = DiffStyle.Copy().
 				Width(m.diffViewport.Width).
 				Height(viewportHeight).
 				Render(diffContentStr)
-
-			rightPaneView = diffView
 		}
 
 		mainContent = lipgloss.JoinHorizontal(lipgloss.Top, treeView, rightPaneView)
@@ -663,33 +821,27 @@ func (m Model) View() string {
 }
 
 func (m Model) renderTopBar() string {
-	repo := fmt.Sprintf(" %s", m.repoName)
-	branches := fmt.Sprintf(" %s ➜ %s", m.currentBranch, m.targetBranch)
-	// Determine VCS type
 	vcsType := "git"
 	if m.vcs != nil {
 		if _, isHg := m.vcs.(vcs.HgVCS); isHg {
 			vcsType = "hg"
 		}
 	}
+
 	repoStats := ""
 	if m.statsAdded > 0 || m.statsDeleted > 0 {
 		repoStats = fmt.Sprintf(" +%d -%d", m.statsAdded, m.statsDeleted)
 	}
-	info := fmt.Sprintf("%s:%s %s%s", repo, vcsType, branches, repoStats)
+
+	info := fmt.Sprintf(" %s:%s  %s ➜ %s%s", m.repoName, vcsType, m.currentBranch, m.targetBranch, repoStats)
 	leftSide := TopInfoStyle.Render(info)
 
-	// Right side: selected item path + stats
 	rightSide := ""
 	if selectedItem, ok := m.fileList.SelectedItem().(tree.TreeItem); ok {
 		var displayPath string
 		var statsAdded, statsDeleted int
 
 		if selectedItem.IsDir {
-			// Directory: show dir path + sum of stats for all files under it.
-			// The trailing "/" on the prefix ensures we match only children of
-			// this directory and not sibling directories that share a common
-			// name prefix (e.g. "src/foo" won't match "src/foobar/baz").
 			displayPath = selectedItem.FullPath + "/"
 			prefix := selectedItem.FullPath + "/"
 			for filePath, stats := range m.fileStats {
@@ -699,10 +851,6 @@ func (m Model) renderTopBar() string {
 				}
 			}
 		} else {
-			// File: show file path + per-file stats.
-			// Prefer the pre-computed fileStats map (from --numstat/--stat)
-			// and fall back to currentFileAdded/Deleted (counted from the
-			// rendered diff) when the map hasn't been populated yet.
 			displayPath = selectedItem.FullPath
 			if fs, ok := m.fileStats[selectedItem.FullPath]; ok {
 				statsAdded = fs[0]
@@ -719,12 +867,13 @@ func (m Model) renderTopBar() string {
 			deleted := TopStatsDeletedStyle.Render(fmt.Sprintf("-%d", statsDeleted))
 			fileStats = lipgloss.JoinHorizontal(lipgloss.Center, added, deleted)
 		}
+
 		fileStatsWidth := lipgloss.Width(fileStats)
-		leftWidth := lipgloss.Width(leftSide)
-		maxPathWidth := m.width - leftWidth - fileStatsWidth - 4
+		maxPathWidth := m.width - lipgloss.Width(leftSide) - fileStatsWidth - 4
 		if maxPathWidth < 10 {
 			maxPathWidth = 10
 		}
+
 		truncPath := ansi.Truncate(displayPath, maxPathWidth, "…")
 		if fileStats != "" {
 			rightSide = truncPath + " " + fileStats
@@ -738,15 +887,14 @@ func (m Model) renderTopBar() string {
 		availWidth = 0
 	}
 
-	// Fill space between left and right
 	padding := strings.Repeat(" ", availWidth)
-
 	finalBar := lipgloss.JoinHorizontal(lipgloss.Top, leftSide, padding, rightSide)
+
 	return TopBarStyle.Width(m.width).Render(finalBar)
 }
 
 func (m Model) viewStatusBar() string {
-	shortcuts := StatusKeyStyle.Render("? Help  q Quit  Tab Switch")
+	shortcuts := StatusKeyStyle.Render("? Help  q Quit  Tab Switch  V Visual")
 	return StatusBarStyle.Width(m.width).Render(shortcuts)
 }
 
@@ -768,21 +916,17 @@ func (m Model) renderHelpDrawer() string {
 		HelpTextStyle.Render("e     Edit File"),
 	)
 	col5 := lipgloss.JoinVertical(lipgloss.Left,
-		HelpTextStyle.Render("Supports Git & Hg"),
-		HelpTextStyle.Render("--vcs git/hg"),
+		HelpTextStyle.Render("V     Visual Mode"),
+		HelpTextStyle.Render("esc   Cancel Visual"),
 	)
 
 	return HelpDrawerStyle.Copy().
 		Width(m.width).
 		Render(lipgloss.JoinHorizontal(lipgloss.Top,
-			col1,
-			lipgloss.NewStyle().Width(4).Render(""),
-			col2,
-			lipgloss.NewStyle().Width(4).Render(""),
-			col3,
-			lipgloss.NewStyle().Width(4).Render(""),
-			col4,
-			lipgloss.NewStyle().Width(4).Render(""),
+			col1, lipgloss.NewStyle().Width(4).Render(""),
+			col2, lipgloss.NewStyle().Width(4).Render(""),
+			col3, lipgloss.NewStyle().Width(4).Render(""),
+			col4, lipgloss.NewStyle().Width(4).Render(""),
 			col5,
 		))
 }
@@ -834,10 +978,8 @@ func (m Model) renderEmptyState(w, h int, statusMsg string) string {
 	var guides string
 	if w > 80 {
 		guides = lipgloss.JoinHorizontal(lipgloss.Top,
-			usageBlock,
-			lipgloss.NewStyle().Width(6).Render(""),
-			navBlock,
-			lipgloss.NewStyle().Width(6).Render(""),
+			usageBlock, lipgloss.NewStyle().Width(6).Render(""),
+			navBlock, lipgloss.NewStyle().Width(6).Render(""),
 			nvimBlock,
 		)
 	} else {
@@ -862,4 +1004,35 @@ func (m Model) renderEmptyState(w, h int, statusMsg string) string {
 
 func stripAnsi(str string) string {
 	return ansiRe.ReplaceAllString(str, "")
+}
+
+func isDiffMetadata(cleanLine string) bool {
+	return strings.HasPrefix(cleanLine, "diff --git") ||
+		strings.HasPrefix(cleanLine, "diff -r ") ||
+		strings.HasPrefix(cleanLine, "index ") ||
+		strings.HasPrefix(cleanLine, "new file mode") ||
+		strings.HasPrefix(cleanLine, "old mode") ||
+		strings.HasPrefix(cleanLine, "--- a/") ||
+		strings.HasPrefix(cleanLine, "--- /dev/") ||
+		strings.HasPrefix(cleanLine, "+++ b/") ||
+		strings.HasPrefix(cleanLine, "+++ /dev/") ||
+		strings.HasPrefix(cleanLine, "@@")
+}
+
+// setYOffset safely sets the viewport offset without relying on viewport's internal content.
+func (m *Model) setYOffset(offset int) {
+	maxOffset := len(m.diffLines) - m.diffViewport.Height
+	if maxOffset < 0 {
+		maxOffset = 0
+	}
+
+	if offset > maxOffset {
+		offset = maxOffset
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	// FIX: Assign directly. Do not use m.diffViewport.SetYOffset()!
+	m.diffViewport.YOffset = offset
 }
