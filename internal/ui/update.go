@@ -36,6 +36,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 
+		if msg.String() == "?" {
+			m.showHelp = !m.showHelp
+			m.updateSizes()
+			return m, nil
+		}
+
 		if len(m.fileList.Items()) == 0 {
 			return m, nil
 		}
@@ -57,12 +63,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if len(msg.String()) == 1 && strings.ContainsAny(msg.String(), "0123456789") {
 			m.inputBuffer += msg.String()
-			return m, nil
-		}
-
-		if msg.String() == "?" {
-			m.showHelp = !m.showHelp
-			m.updateSizes()
 			return m, nil
 		}
 
