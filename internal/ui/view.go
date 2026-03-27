@@ -202,12 +202,6 @@ func (m Model) View() string {
 		mainContent = lipgloss.JoinHorizontal(lipgloss.Top, treeView, rightPaneView)
 	}
 
-	mainContent = lipgloss.NewStyle().
-		Width(m.width).
-		Height(contentHeight).
-		MaxHeight(contentHeight).
-		Render(mainContent)
-
 	return lipgloss.JoinVertical(lipgloss.Top, topBar, mainContent, bottomBar)
 }
 
