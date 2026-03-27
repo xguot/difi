@@ -46,7 +46,7 @@ changelog:
 brews:
   - name: difi
     repository:
-      owner: oug-t
+      owner: xguot
       name: homebrew-difi
     directory: Formula
     homepage: "https://github.com/xguot/difi"

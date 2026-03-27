@@ -34,7 +34,6 @@ type TreeItem struct {
 	Icon     string
 }
 
-// Implement list.Item interface
 func (i TreeItem) FilterValue() string { return i.Name }
 func (i TreeItem) Description() string { return "" }
 func (i TreeItem) Title() string {
@@ -47,7 +46,6 @@ func (i TreeItem) Title() string {
 			disclosure = "▸"
 		}
 	}
-	// Icon spacing handled in formatting
 	return fmt.Sprintf("%s%s %s %s", indent, disclosure, i.Icon, i.Name)
 }
 
@@ -57,8 +55,8 @@ func New(paths []string) *FileTree {
 		Name:     "root",
 		IsDir:    true,
 		Children: make(map[string]*Node),
-		Expanded: true, // Root always expanded
-		Depth:    -1,   // Root is hidden
+		Expanded: true,
+		Depth:    -1,
 	}
 
 	for _, path := range paths {
@@ -68,7 +66,6 @@ func New(paths []string) *FileTree {
 	return &FileTree{Root: root}
 }
 
-// addPath inserts a path into the tree, creating directory nodes as needed.
 func addPath(root *Node, path string) {
 	cleanPath := filepath.ToSlash(filepath.Clean(path))
 	parts := strings.Split(cleanPath, "/")
@@ -82,8 +79,6 @@ func addPath(root *Node, path string) {
 				nodePath = current.FullPath + "/" + name
 			}
 
-			// Directories default to expanded for visibility, or collapsed if preferred
-			// GitHub usually auto-expands to show changed files. Here we auto-expand.
 			current.Children[name] = &Node{
 				Name:     name,
 				FullPath: nodePath,
@@ -104,15 +99,12 @@ func (t *FileTree) Items() []list.Item {
 	return items
 }
 
-// flatten recursively builds the list, respecting expansion state.
 func flatten(node *Node, items *[]list.Item) {
-	// Collect children to sort
 	children := make([]*Node, 0, len(node.Children))
 	for _, child := range node.Children {
 		children = append(children, child)
 	}
 
-	// Sort: Directories first, then alphabetical
 	sort.Slice(children, func(i, j int) bool {
 		if children[i].IsDir != children[j].IsDir {
 			return children[i].IsDir
@@ -130,7 +122,6 @@ func flatten(node *Node, items *[]list.Item) {
 			Icon:     getIcon(child.Name, child.IsDir),
 		})
 
-		// Only traverse children if expanded
 		if child.IsDir && child.Expanded {
 			flatten(child, items)
 		}
@@ -149,7 +140,6 @@ func findNode(node *Node, fullPath string) *Node {
 	if node.FullPath == fullPath {
 		return node
 	}
-	// Simple traversal. For very large trees, a map cache in FileTree might be faster.
 	for _, child := range node.Children {
 		if strings.HasPrefix(fullPath, child.FullPath) {
 			if child.FullPath == fullPath {
