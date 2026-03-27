@@ -8,8 +8,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/oug-t/difi/internal/tree"
-	"github.com/oug-t/difi/internal/vcs"
+	"github.com/xguot/difi/internal/tree"
+	"github.com/xguot/difi/internal/vcs"
 )
 
 func (m Model) View() string {
@@ -354,7 +354,7 @@ func (m Model) renderEmptyState(w, h int, statusMsg string) string {
 	)
 
 	nvimHeader := EmptyHeaderStyle.Render("Neovim Integration")
-	nvim1 := lipgloss.NewStyle().Foreground(ColorText).Render("oug-t/difi.nvim")
+	nvim1 := lipgloss.NewStyle().Foreground(ColorText).Render("xguot/difi.nvim")
 	nvimDesc1 := EmptyCodeStyle.Render("Install plugin")
 	nvim2 := lipgloss.NewStyle().Foreground(ColorText).Render("Press 'e'")
 	nvimDesc2 := EmptyCodeStyle.Render("Edit with context")

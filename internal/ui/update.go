@@ -8,8 +8,8 @@ import (
 	"github.com/alecthomas/chroma/v2/quick"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/oug-t/difi/internal/tree"
-	"github.com/oug-t/difi/internal/vcs"
+	"github.com/xguot/difi/internal/tree"
+	"github.com/xguot/difi/internal/vcs"
 )
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {

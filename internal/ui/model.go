@@ -9,9 +9,9 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/oug-t/difi/internal/config"
-	"github.com/oug-t/difi/internal/tree"
-	"github.com/oug-t/difi/internal/vcs"
+	"github.com/xguot/difi/internal/config"
+	"github.com/xguot/difi/internal/tree"
+	"github.com/xguot/difi/internal/vcs"
 )
 
 type Focus int

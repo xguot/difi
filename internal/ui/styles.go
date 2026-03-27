@@ -2,7 +2,7 @@ package ui
 
 import (
 	"github.com/charmbracelet/lipgloss"
-	"github.com/oug-t/difi/internal/config"
+	"github.com/xguot/difi/internal/config"
 )
 
 var (

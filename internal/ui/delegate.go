@@ -9,8 +9,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/oug-t/difi/internal/config"
-	"github.com/oug-t/difi/internal/tree"
+	"github.com/xguot/difi/internal/config"
+	"github.com/xguot/difi/internal/tree"
 )
 
 type TreeDelegate struct {
