@@ -4,7 +4,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Go-00ADD8?style=for-the-badge&logo=go&logoColor=white" />
   <img src="https://img.shields.io/badge/Bubble_Tea-E2386F?style=for-the-badge&logo=tea&logoColor=white" />
-  <img src="https://img.shields.io/github/license/oug-t/difi?style=for-the-badge&color=2e3440" />
+  <img src="https://img.shields.io/github/license/xguot/difi?style=for-the-badge&color=2e3440" />
 </p>
 
 <p align="center">
@@ -31,7 +31,7 @@ brew install difi
 #### Go Install
 
 ```bash
-go install github.com/oug-t/difi/cmd/difi@latest
+go install github.com/xguot/difi/cmd/difi@latest
 ```
 
 #### AUR (Arch Linux)
@@ -105,13 +105,13 @@ ui:
 
 ### Options
 
-| Key | Default | Description |
-| :--- | :--- | :--- |
-| `editor` | `$DIFI_EDITOR`, `$EDITOR`, `$VISUAL`, or `vi` | The editor to open when pressing `e` on a file. |
-| `ui.line_numbers` | `"hybrid"` | The style of line numbers in the diff view. |
-| `ui.theme` | `"default"` | The core theme used for syntax highlighting. |
-| `ui.diff_add_bg` | `""` | Hex code or terminal color for added line backgrounds. |
-| `ui.diff_del_bg` | `""` | Hex code or terminal color for deleted line backgrounds. |
+| Key               | Default                                       | Description                                              |
+| :---------------- | :-------------------------------------------- | :------------------------------------------------------- |
+| `editor`          | `$DIFI_EDITOR`, `$EDITOR`, `$VISUAL`, or `vi` | The editor to open when pressing `e` on a file.          |
+| `ui.line_numbers` | `"hybrid"`                                    | The style of line numbers in the diff view.              |
+| `ui.theme`        | `"default"`                                   | The core theme used for syntax highlighting.             |
+| `ui.diff_add_bg`  | `""`                                          | Hex code or terminal color for added line backgrounds.   |
+| `ui.diff_del_bg`  | `""`                                          | Hex code or terminal color for deleted line backgrounds. |
 
 ## Integrations
 
@@ -137,7 +137,7 @@ ui:
 
 #### difi.nvim
 
-Get the ultimate review experience with **[difi.nvim](https://github.com/oug-t/difi.nvim)**.
+Get the ultimate review experience with **[difi.nvim](https://github.com/xguot/difi.nvim)**.
 
 - **Auto-Open:** Instantly jumps to the file and line when you press `e` in the CLI.
 - **Visual Diff:** Renders diffs inline with familiar green/red highlights—just like reviewing a PR on GitHub.
@@ -145,7 +145,7 @@ Get the ultimate review experience with **[difi.nvim](https://github.com/oug-t/d
 - **Context Aware:** Automatically syncs with your `difi` session target.
 
 <p align="left">
-  <a href="https://github.com/oug-t/difi.nvim">
+  <a href="https://github.com/xguot/difi.nvim">
     <img src="https://img.shields.io/badge/Get_difi.nvim-57A143?style=for-the-badge&logo=neovim&logoColor=white" alt="Get difi.nvim" />
   </a>
 </p>
@@ -167,7 +167,7 @@ git difi
 ## Contributing
 
 ```bash
-git clone https://github.com/oug-t/difi
+git clone https://github.com/xguot/difi
 cd difi
 go run cmd/difi/main.go
 ```
@@ -180,11 +180,11 @@ Contributions are especially welcome in:
 
 ## Star History
 
-<a href="https://star-history.com/#oug-t/difi&Date">
+<a href="https://star-history.com/#xguot/difi&Date">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=oug-t/difi&type=Date&theme=dark" />
-      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=oug-t/difi&type=Date" />
-      <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=oug-t/difi&type=Date" />
+      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=xguot/difi&type=Date&theme=dark" />
+      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=xguot/difi&type=Date" />
+      <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=xguot/difi&type=Date" />
     </picture>
   </a>
 </div>

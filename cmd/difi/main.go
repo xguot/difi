@@ -7,9 +7,9 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/oug-t/difi/internal/config"
-	"github.com/oug-t/difi/internal/ui"
-	"github.com/oug-t/difi/internal/vcs"
+	"github.com/xguot/difi/internal/config"
+	"github.com/xguot/difi/internal/ui"
+	"github.com/xguot/difi/internal/vcs"
 )
 
 var version = "dev"

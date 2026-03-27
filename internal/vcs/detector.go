@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/oug-t/difi/internal/git"
-	"github.com/oug-t/difi/internal/hg"
+	"github.com/xguot/difi/internal/git"
+	"github.com/xguot/difi/internal/hg"
 )
 
 type GitVCS struct{}
