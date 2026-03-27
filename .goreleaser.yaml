@@ -43,7 +43,7 @@ changelog:
       - "^docs:"
       - "^test:"
 
-homebrews:
+brews:
   - name: difi
     repository:
       owner: oug-t
