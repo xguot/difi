@@ -1,5 +1,13 @@
 <h1 align="center"><code>difi</code></h1>
-<p align="center"><em>Review and refine Git diffs before you push</em></p>
+
+<p align="center">
+  <b>Review and refine Git diffs before you push.</b>
+</p>
+
+<p align="center">
+  <b>git diff</b> shows changes. <b>difi</b> helps you <em>review</em> them.<br>
+  Built in Go for instant startup, it turns raw diffs into a structured file tree with native <code>h j k l</code> navigation and a frictionless jump-to-editor workflow.
+</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Go-00ADD8?style=for-the-badge&logo=go&logoColor=white" />
@@ -10,15 +18,6 @@
 <p align="center">
   <img src= "https://github.com/user-attachments/assets/3695cfd2-148c-463d-9630-547d152adde0" alt="difi_demo" />
 </p>
-
-## Why difi?
-
-**git diff** shows changes. **difi** helps you _review_ them.
-
-- ⏱️ **Instant** — Built in Go. Launches immediately with no daemon or indexing.
-- 🗂️ **Structured** — A clean file tree and focused diffs for fast mental parsing.
-- ⚙️ **Adaptable** — Auto-detects your VCS (Git/Mercurial) and easily configures to match your terminal's theme and style.
-- ⌨️ **Vim Integration** — Navigate natively with `h j k l` and press `e` to jump straight to the exact line in Neovim for frictionless editing.
 
 ## Installation
 
@@ -54,11 +53,21 @@ pikaur -S difi
 
 ## Workflow
 
-- Run difi in any Git repository against main:
+Run difi in any Git repository against main:
 
 ```bash
 cd my-project
 difi
+```
+
+To compare against a specific branch or commit, just pass it as an argument:
+
+```bash
+# Compare against the main branch
+difi main
+
+# Compare against the previous commit
+difi HEAD~1
 ```
 
 **Piping & Alternative VCS**
