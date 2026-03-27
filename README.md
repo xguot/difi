@@ -5,11 +5,6 @@
 </p>
 
 <p align="center">
-  <b>git diff</b> shows changes. <b>difi</b> helps you <em>review</em> them.<br>
-  Built in Go for instant startup, it turns raw diffs into a structured file tree with native <code>h j k l</code> navigation and a frictionless jump-to-editor workflow.
-</p>
-
-<p align="center">
   <img src="https://img.shields.io/badge/Go-00ADD8?style=for-the-badge&logo=go&logoColor=white" />
   <img src="https://img.shields.io/badge/Bubble_Tea-E2386F?style=for-the-badge&logo=tea&logoColor=white" />
   <img src="https://img.shields.io/github/license/xguot/difi?style=for-the-badge&color=2e3440" />
