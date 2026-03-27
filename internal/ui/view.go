@@ -19,15 +19,19 @@ func (m Model) View() string {
 
 	topBar := m.renderTopBar()
 
-	var mainContent string
-	contentHeight := m.height - 2
+	var bottomBar string
 	if m.showHelp {
-		contentHeight -= 6
+		bottomBar = m.renderHelpDrawer()
+	} else {
+		bottomBar = m.viewStatusBar()
 	}
+
+	contentHeight := m.height - lipgloss.Height(topBar) - lipgloss.Height(bottomBar)
 	if contentHeight < 0 {
 		contentHeight = 0
 	}
 
+	var mainContent string
 	if len(m.fileList.Items()) == 0 {
 		mainContent = m.renderEmptyState(m.width, contentHeight, "No changes found against "+m.targetBranch)
 	} else {
@@ -38,19 +42,19 @@ func (m Model) View() string {
 
 		treeView := treeStyle.Copy().
 			Width(m.fileList.Width()).
-			Height(m.fileList.Height()).
-			MaxHeight(m.fileList.Height() + 2).
+			Height(contentHeight).
+			MaxHeight(contentHeight).
 			Render(m.fileList.View())
 
 		var rightPaneView string
 		selectedItem, ok := m.fileList.SelectedItem().(tree.TreeItem)
 
 		if ok && selectedItem.IsDir {
-			rightPaneView = m.renderEmptyState(m.diffViewport.Width, m.diffViewport.Height, "Directory: "+selectedItem.Name)
+			rightPaneView = m.renderEmptyState(m.diffViewport.Width, contentHeight, "Directory: "+selectedItem.Name)
 		} else {
 			var renderedDiff strings.Builder
 
-			viewportHeight := m.diffViewport.Height
+			viewportHeight := contentHeight
 			start := m.diffViewport.YOffset
 			end := start + viewportHeight
 			if end > len(m.diffLines) {
@@ -83,7 +87,6 @@ func (m Model) View() string {
 					codeContent = codeContent[1:]
 				}
 
-				// Active line evaluation handles both single cursor and Visual Mode
 				isCursor := false
 				if m.focus == FocusDiff {
 					if m.visualMode {
@@ -134,7 +137,6 @@ func (m Model) View() string {
 				}
 
 				var line string
-
 				if isCursor {
 					fullStr := gutterStr + ansi.Truncate(codeContent, maxLineWidth-4, "")
 
@@ -182,7 +184,6 @@ func (m Model) View() string {
 					}
 
 					hlCode = ansi.Truncate(hlCode, maxLineWidth-4, "")
-
 					line = gutter + hlCode
 				}
 
@@ -193,29 +194,27 @@ func (m Model) View() string {
 
 			rightPaneView = DiffStyle.Copy().
 				Width(m.diffViewport.Width).
-				Height(viewportHeight).
+				Height(contentHeight).
+				MaxHeight(contentHeight).
 				Render(diffContentStr)
 		}
 
 		mainContent = lipgloss.JoinHorizontal(lipgloss.Top, treeView, rightPaneView)
 	}
 
-	var bottomBar string
-	if m.showHelp {
-		bottomBar = m.renderHelpDrawer()
-	} else {
-		bottomBar = m.viewStatusBar()
-	}
+	mainContent = lipgloss.NewStyle().
+		Width(m.width).
+		Height(contentHeight).
+		MaxHeight(contentHeight).
+		Render(mainContent)
 
 	return lipgloss.JoinVertical(lipgloss.Top, topBar, mainContent, bottomBar)
 }
 
 func (m Model) renderTopBar() string {
 	vcsType := "git"
-	if m.vcs != nil {
-		if _, isHg := m.vcs.(vcs.HgVCS); isHg {
-			vcsType = "hg"
-		}
+	if _, isHg := m.vcs.(vcs.HgVCS); isHg {
+		vcsType = "hg"
 	}
 
 	repoStats := ""
