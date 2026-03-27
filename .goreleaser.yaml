@@ -49,6 +49,6 @@ homebrews:
       owner: oug-t
       name: homebrew-difi
     directory: Formula
-    homepage: "https://github.com/oug-t/difi"
+    homepage: "https://github.com/xguot/difi"
     description: "The pixel-perfect terminal diff viewer"
     license: "MIT"
