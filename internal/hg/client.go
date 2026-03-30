@@ -199,46 +199,56 @@ func DiffStatsByFile(targetBranch string) (map[string][2]int, error) {
 	return result, nil
 }
 
-func CalculateFileLine(diffContent string, visualLineIndex int) int {
-	lines := strings.Split(diffContent, "\n")
-	if visualLineIndex >= len(lines) {
-		return 0
-	}
-
-	currentLineNo := 0
-	lastWasHunk := false
-	inHeader := true
-
-	for i := 0; i <= visualLineIndex; i++ {
-		line := lines[i]
-		matches := hunkHeaderRe.FindStringSubmatch(line)
-		if len(matches) > 1 {
-			startLine, _ := strconv.Atoi(matches[1])
-			currentLineNo = startLine
-			lastWasHunk = true
-			inHeader = false
-			continue
-		}
-
-		lastWasHunk = false
-		cleanLine := stripAnsi(line)
-
-		if inHeader {
-			continue
-		}
-
-		if strings.HasPrefix(cleanLine, " ") || strings.HasPrefix(cleanLine, "+") {
-			currentLineNo++
-		}
-	}
-
-	if currentLineNo == 0 {
+func CalculateFileLine(diffLines []string, visualLineIndex int) int {
+	if len(diffLines) == 0 {
 		return 1
 	}
-	if lastWasHunk {
-		return currentLineNo - 1
+
+	if visualLineIndex < 0 {
+		visualLineIndex = 0
 	}
-	return currentLineNo - 1
+	if visualLineIndex >= len(diffLines) {
+		visualLineIndex = len(diffLines) - 1
+	}
+
+	currentLineNo := 1
+	mappedLineNo := 1
+	inHunk := false
+
+	for i := 0; i <= visualLineIndex; i++ {
+		cleanLine := stripAnsi(diffLines[i])
+		cleanLine = strings.TrimRight(cleanLine, "\r")
+		matches := hunkHeaderRe.FindStringSubmatch(cleanLine)
+
+		if len(matches) > 1 {
+			startLine, _ := strconv.Atoi(matches[1])
+			if startLine < 1 {
+				startLine = 1
+			}
+			currentLineNo = startLine
+			mappedLineNo = currentLineNo
+			inHunk = true
+			continue
+		}
+
+		if !inHunk {
+			continue
+		}
+
+		switch {
+		case strings.HasPrefix(cleanLine, " "), strings.HasPrefix(cleanLine, "+"):
+			mappedLineNo = currentLineNo
+			currentLineNo++
+		case strings.HasPrefix(cleanLine, "-"):
+			mappedLineNo = currentLineNo
+		}
+	}
+
+	if mappedLineNo < 1 {
+		return 1
+	}
+
+	return mappedLineNo
 }
 
 func stripAnsi(str string) string {

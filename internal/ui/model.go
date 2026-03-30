@@ -219,6 +219,13 @@ func isDiffMetadata(cleanLine string) bool {
 		strings.HasPrefix(cleanLine, "@@")
 }
 
+func isDiffContentLine(cleanLine string) bool {
+	cleanLine = strings.TrimRight(cleanLine, "\r")
+	return strings.HasPrefix(cleanLine, " ") ||
+		strings.HasPrefix(cleanLine, "+") ||
+		strings.HasPrefix(cleanLine, "-")
+}
+
 func (m *Model) setYOffset(offset int) {
 	maxOffset := len(m.diffLines) - m.diffViewport.Height
 	if maxOffset < 0 {
@@ -250,7 +257,7 @@ func (m *Model) snapCursor(idx int, dir int) int {
 	curr := idx
 	for curr >= 0 && curr < len(m.diffLines) {
 		cleanLine := stripAnsi(m.diffLines[curr])
-		if !isDiffMetadata(cleanLine) {
+		if isDiffContentLine(cleanLine) {
 			return curr
 		}
 		curr += dir
@@ -259,7 +266,7 @@ func (m *Model) snapCursor(idx int, dir int) int {
 	curr = idx
 	for curr >= 0 && curr < len(m.diffLines) {
 		cleanLine := stripAnsi(m.diffLines[curr])
-		if !isDiffMetadata(cleanLine) {
+		if isDiffContentLine(cleanLine) {
 			return curr
 		}
 		curr -= dir

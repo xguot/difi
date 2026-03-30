@@ -119,7 +119,7 @@ func (m Model) View() string {
 
 				if mode != "hidden" {
 					if isCursor && mode == "hybrid" {
-						realLine := m.vcs.CalculateFileLine(m.diffContent, m.diffCursor)
+						realLine := m.vcs.CalculateFileLine(m.diffLines, m.diffCursor)
 						numStr = fmt.Sprintf("%d", realLine)
 					} else if isCursor && mode == "relative" {
 						numStr = "0"
