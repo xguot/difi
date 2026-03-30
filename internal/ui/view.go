@@ -277,8 +277,18 @@ func (m Model) renderTopBar() string {
 }
 
 func (m Model) viewStatusBar() string {
-	shortcuts := StatusKeyStyle.Render("? Help  q Quit  Tab Switch  V Visual")
-	return StatusBarStyle.Width(m.width).Render(shortcuts)
+	shortcutsStyle := StatusKeyStyle.Copy().Background(nord0)
+	shortcuts := shortcutsStyle.Render("? Help  q Quit  Tab Switch  V Visual")
+
+	availWidth := m.width - lipgloss.Width(shortcuts)
+	if availWidth < 0 {
+		availWidth = 0
+	}
+
+	paddingStyle := lipgloss.NewStyle().Background(nord0)
+	padding := paddingStyle.Render(strings.Repeat(" ", availWidth))
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, shortcuts, padding)
 }
 
 func (m Model) renderHelpDrawer() string {
