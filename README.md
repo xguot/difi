@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <video src="assets/demo.mp4" autoplay loop muted playsinline width="100%"></video>
+    <img src="assets/demo.gif" alt="difi demo" />
 </p>
 
 ## Installation
