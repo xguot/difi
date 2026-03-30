@@ -43,8 +43,8 @@ func (g GitVCS) DiffStats(targetBranch string) (added int, deleted int, err erro
 func (g GitVCS) DiffStatsByFile(targetBranch string) (map[string][2]int, error) {
 	return git.DiffStatsByFile(targetBranch)
 }
-func (g GitVCS) CalculateFileLine(diffContent string, visualLineIndex int) int {
-	return git.CalculateFileLine(diffContent, visualLineIndex)
+func (g GitVCS) CalculateFileLine(diffLines []string, visualLineIndex int) int {
+	return git.CalculateFileLine(diffLines, visualLineIndex)
 }
 func (g GitVCS) ParseFilesFromDiff(diffText string) []string { return git.ParseFilesFromDiff(diffText) }
 func (g GitVCS) ExtractFileDiff(diffText, targetPath string) string {
@@ -82,8 +82,8 @@ func (h HgVCS) DiffStats(targetBranch string) (added int, deleted int, err error
 func (h HgVCS) DiffStatsByFile(targetBranch string) (map[string][2]int, error) {
 	return hg.DiffStatsByFile(targetBranch)
 }
-func (h HgVCS) CalculateFileLine(diffContent string, visualLineIndex int) int {
-	return hg.CalculateFileLine(diffContent, visualLineIndex)
+func (h HgVCS) CalculateFileLine(diffLines []string, visualLineIndex int) int {
+	return hg.CalculateFileLine(diffLines, visualLineIndex)
 }
 func (h HgVCS) ParseFilesFromDiff(diffText string) []string { return hg.ParseFilesFromDiff(diffText) }
 func (h HgVCS) ExtractFileDiff(diffText, targetPath string) string {

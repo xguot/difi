@@ -144,9 +144,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				line := 0
 				if m.focus == FocusDiff {
-					line = m.vcs.CalculateFileLine(m.diffContent, m.diffCursor)
+					line = m.vcs.CalculateFileLine(m.diffLines, m.diffCursor)
 				} else {
-					line = m.vcs.CalculateFileLine(m.diffContent, 0)
+					line = m.vcs.CalculateFileLine(m.diffLines, 0)
 				}
 				m.inputBuffer = ""
 				return m, m.vcs.OpenEditorCmd(m.selectedPath, line, m.targetBranch, m.treeDelegate.Config.Editor)
@@ -321,6 +321,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					hlLines = append(hlLines, codeContent)
 				}
 			}
+		}
+
+		for len(cleanLines) > 0 {
+			lastLine := strings.TrimRight(stripAnsi(cleanLines[len(cleanLines)-1]), "\r")
+			if lastLine != "" {
+				break
+			}
+			cleanLines = cleanLines[:len(cleanLines)-1]
+			hlLines = hlLines[:len(hlLines)-1]
 		}
 
 		m.diffLines = cleanLines
