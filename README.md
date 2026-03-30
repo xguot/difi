@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src= "https://github.com/user-attachments/assets/3695cfd2-148c-463d-9630-547d152adde0" alt="difi_demo" />
+    <img src="assets/demo.gif" alt="difi demo" />
 </p>
 
 ## Installation
