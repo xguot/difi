@@ -65,13 +65,13 @@ difi main
 difi HEAD~1
 ```
 
-**Piping & Alternative VCS**
+## Piping & Alternative VCS
 
-- You can also pass raw diffs directly into `difi` via standard input. This is perfect for patch files or other version control systems like Jujutsu:
+You can also pass raw diffs directly into `difi` via standard input. This is perfect for patch files or other version control systems like Jujutsu:
 
 ```bash
 # Review a saved patch file
-cat changes.patch | difi
+difi < changes.patch
 
 # Review changes in Jujutsu (jj)
 jj diff --git | difi
