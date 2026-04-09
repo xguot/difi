@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.svg" alt="difi logo">
+  <img src="assets/wordmark.svg" alt="difi logo" width="300">
 </p>
 
 <p align="center">
