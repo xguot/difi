@@ -1,4 +1,4 @@
-<h1 align="center"><code>difi</code></h1>
+<h1 align="center"><img src="assests/logo.svg" alt="difi logo" width="200"></h1>
 
 <p align="center">
   <b>Review and refine Git diffs before you push.</b>
