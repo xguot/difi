@@ -1,4 +1,6 @@
-<h1 align="center"><img src="assets/logo.svg" alt="difi logo"></h1>
+<p align="center">
+  <img src="assets/logo.svg" alt="difi logo">
+</p>
 
 <p align="center">
   <b>Review and refine Git diffs before you push.</b>
@@ -168,19 +170,9 @@ Now you can run it directly from git:
 git difi
 ```
 
-## Contributing
+## Contributors
 
-```bash
-git clone https://github.com/xguot/difi
-cd difi
-go run cmd/difi/main.go
-```
-
-Contributions are especially welcome in:
-
-- diff.nvim rendering edge cases
-- UI polish and accessibility
-- Windows support
+- [Abraham Joy (@abraham-1672)](https://github.com/abraham-1672) - Logo and Wordmark Design
 
 ## Star History
 
