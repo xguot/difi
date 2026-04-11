@@ -7,6 +7,9 @@
 </p>
 
 <p align="center">
+  <a href="https://difi.vercel.app/">
+    <img src="https://img.shields.io/badge/Website-difi.vercel.app-D0DFEE?style=for-the-badge&logo=vercel&logoColor=black" alt="Website" />
+  </a>
   <img src="https://img.shields.io/badge/Go-00ADD8?style=for-the-badge&logo=go&logoColor=white" />
   <img src="https://img.shields.io/badge/Bubble_Tea-E2386F?style=for-the-badge&logo=tea&logoColor=white" />
   <img src="https://img.shields.io/github/license/xguot/difi?style=for-the-badge&color=2e3440" />
@@ -15,6 +18,7 @@
 <p align="center">
     <img src="assets/demo.gif" alt="difi demo" />
 </p>
+
 
 ## Installation
 
