@@ -32,11 +32,15 @@ type TreeItem struct {
 	Depth    int
 	Expanded bool
 	Icon     string
+	FlatMode bool
 }
 
-func (i TreeItem) FilterValue() string { return i.Name }
+func (i TreeItem) FilterValue() string { return i.FullPath }
 func (i TreeItem) Description() string { return "" }
 func (i TreeItem) Title() string {
+	if i.FlatMode {
+		return fmt.Sprintf("%s %s", i.Icon, i.FullPath)
+	}
 	indent := strings.Repeat("  ", i.Depth)
 	disclosure := " "
 	if i.IsDir {
@@ -92,11 +96,40 @@ func addPath(root *Node, path string) {
 	}
 }
 
-// Items returns the flattened, visible list items based on expansion state.
-func (t *FileTree) Items() []list.Item {
+// Items returns the flattened list items based on expansion state or flat mode.
+func (t *FileTree) Items(flat bool) []list.Item {
 	var items []list.Item
-	flatten(t.Root, &items)
+	if flat {
+		t.flattenFiles(t.Root, &items)
+	} else {
+		flatten(t.Root, &items)
+	}
 	return items
+}
+
+func (t *FileTree) flattenFiles(node *Node, items *[]list.Item) {
+	children := make([]*Node, 0, len(node.Children))
+	for _, child := range node.Children {
+		children = append(children, child)
+	}
+
+	sort.Slice(children, func(i, j int) bool {
+		return strings.ToLower(children[i].FullPath) < strings.ToLower(children[j].FullPath)
+	})
+
+	for _, child := range children {
+		if !child.IsDir {
+			*items = append(*items, TreeItem{
+				Name:     child.Name,
+				FullPath: child.FullPath,
+				IsDir:    child.IsDir,
+				Depth:    child.Depth,
+				Icon:     getIcon(child.Name, child.IsDir),
+				FlatMode: true,
+			})
+		}
+		t.flattenFiles(child, items)
+	}
 }
 
 func flatten(node *Node, items *[]list.Item) {
@@ -120,6 +153,7 @@ func flatten(node *Node, items *[]list.Item) {
 			Depth:    child.Depth,
 			Expanded: child.Expanded,
 			Icon:     getIcon(child.Name, child.IsDir),
+			FlatMode: false,
 		})
 
 		if child.IsDir && child.Expanded {

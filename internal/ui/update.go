@@ -127,12 +127,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.updateTreeFocus()
 			m.inputBuffer = ""
 
+		case "f":
+			if m.focus == FocusTree {
+				m.flatMode = !m.flatMode
+				m.fileList.SetItems(m.treeState.Items(m.flatMode))
+				for i, item := range m.fileList.Items() {
+					if ti, ok := item.(tree.TreeItem); ok && ti.FullPath == m.selectedPath {
+						m.fileList.Select(i)
+						break
+					}
+				}
+				return m, nil
+			}
+
 		case "enter", "e":
 			m.visualMode = false
 			if m.focus == FocusTree && msg.String() == "enter" {
 				if i, ok := m.fileList.SelectedItem().(tree.TreeItem); ok && i.IsDir {
 					m.treeState.ToggleExpand(i.FullPath)
-					m.fileList.SetItems(m.treeState.Items())
+					m.fileList.SetItems(m.treeState.Items(m.flatMode))
 					return m, nil
 				}
 			}

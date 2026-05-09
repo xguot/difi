@@ -278,7 +278,7 @@ func (m Model) renderTopBar() string {
 
 func (m Model) viewStatusBar() string {
 	shortcutsStyle := StatusKeyStyle.Copy().Background(nord0)
-	shortcuts := shortcutsStyle.Render("? Help  q Quit  Tab Switch  V Visual")
+	shortcuts := shortcutsStyle.Render("? Help  q Quit  Tab Switch  V Visual  f Flat")
 
 	availWidth := m.width - lipgloss.Width(shortcuts)
 	if availWidth < 0 {
@@ -310,6 +310,7 @@ func (m Model) renderHelpDrawer() string {
 	)
 	col5 := lipgloss.JoinVertical(lipgloss.Left,
 		HelpTextStyle.Render("V     Visual Mode"),
+		HelpTextStyle.Render("f     Flat Mode"),
 		HelpTextStyle.Render("esc   Cancel Visual"),
 	)
 

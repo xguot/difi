@@ -17,6 +17,7 @@ var version = "dev"
 func main() {
 	showVersion := flag.Bool("version", false, "Show version")
 	plain := flag.Bool("plain", false, "Print a plain summary")
+	flat := flag.Bool("flat", false, "Use one-line file navigation")
 	forceVCS := flag.String("vcs", "", "Force specific VCS (git or hg)")
 	flag.Parse()
 
@@ -79,7 +80,7 @@ func main() {
 		}
 	}
 
-	p := tea.NewProgram(ui.NewModel(cfg, target, pipedDiff, vcsClient), opts...)
+	p := tea.NewProgram(ui.NewModel(cfg, target, pipedDiff, vcsClient, *flat), opts...)
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Error: %v\n", err)
 		os.Exit(1)

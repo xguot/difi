@@ -3,7 +3,6 @@ package ui
 import (
 	"fmt"
 	"io"
-	"os/exec"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -22,21 +21,6 @@ func (d TreeDelegate) Height() int  { return 1 }
 func (d TreeDelegate) Spacing() int { return 0 }
 
 func (d TreeDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "e":
-			i, ok := m.SelectedItem().(tree.TreeItem)
-			if !ok {
-				return nil
-			}
-
-			c := exec.Command(d.Config.Editor, i.Title())
-			return tea.ExecProcess(c, func(err error) tea.Msg {
-				return nil
-			})
-		}
-	}
 	return nil
 }
 

@@ -61,6 +61,7 @@ type Model struct {
 
 	focus    Focus
 	showHelp bool
+	flatMode bool
 
 	width, height int
 
@@ -68,7 +69,7 @@ type Model struct {
 	vcs       vcs.VCS
 }
 
-func NewModel(cfg config.Config, targetBranch string, pipedDiff string, vcsClient vcs.VCS) Model {
+func NewModel(cfg config.Config, targetBranch string, pipedDiff string, vcsClient vcs.VCS, flatMode bool) Model {
 	InitStyles(cfg)
 
 	var files []string
@@ -78,7 +79,7 @@ func NewModel(cfg config.Config, targetBranch string, pipedDiff string, vcsClien
 		files, _ = vcsClient.ListChangedFiles(targetBranch)
 	}
 	t := tree.New(files)
-	items := t.Items()
+	items := t.Items(flatMode)
 
 	delegate := TreeDelegate{
 		Config:  cfg,
@@ -103,6 +104,7 @@ func NewModel(cfg config.Config, targetBranch string, pipedDiff string, vcsClien
 		targetBranch:  targetBranch,
 		repoName:      vcsClient.GetRepoName(),
 		showHelp:      false,
+		flatMode:      flatMode,
 		inputBuffer:   "",
 		pendingZ:      false,
 		pipedDiff:     pipedDiff,
