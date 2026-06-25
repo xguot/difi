@@ -34,7 +34,17 @@ func (m Model) View() string {
 	}
 
 	var mainContent string
-	if len(m.fileList.Items()) == 0 {
+
+	// Help buffer takes priority over everything
+	if m.helpMode {
+		treeView := S.PaneStyle.
+			Width(m.fileList.Width()).
+			Height(contentHeight).
+			MaxHeight(contentHeight).
+			Render(m.fileList.View())
+		rightPaneView := m.renderHelpBuffer(contentHeight)
+		mainContent = lipgloss.JoinHorizontal(lipgloss.Top, treeView, rightPaneView)
+	} else if len(m.fileList.Items()) == 0 {
 		mainContent = m.renderEmptyState(m.width, contentHeight, "No changes found against "+m.targetBranch)
 	} else {
 		treeStyle := S.PaneStyle
@@ -49,15 +59,11 @@ func (m Model) View() string {
 			Render(m.fileList.View())
 
 		var rightPaneView string
+		selectedItem, ok := m.fileList.SelectedItem().(tree.TreeItem)
 
-		if m.helpMode {
-			rightPaneView = m.renderHelpBuffer(contentHeight)
+		if ok && selectedItem.IsDir {
+			rightPaneView = m.renderEmptyState(m.diffViewport.Width, contentHeight, "Directory: "+selectedItem.Name)
 		} else {
-			selectedItem, ok := m.fileList.SelectedItem().(tree.TreeItem)
-
-			if ok && selectedItem.IsDir {
-				rightPaneView = m.renderEmptyState(m.diffViewport.Width, contentHeight, "Directory: "+selectedItem.Name)
-			} else {
 			var renderedDiff strings.Builder
 
 			viewportHeight := contentHeight
@@ -207,7 +213,6 @@ func (m Model) View() string {
 				MaxHeight(contentHeight).
 				Render(diffContentStr)
 			}
-		}
 
 		mainContent = lipgloss.JoinHorizontal(lipgloss.Top, treeView, rightPaneView)
 	}
