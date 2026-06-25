@@ -94,8 +94,9 @@ git diff | difi
 | `j / k`       | Move cursor down / up                        |
 | `h / l`       | Focus Left (Tree) / Focus Right (Diff)       |
 | `e` / `Enter` | Edit file (opens editor at selected line)    |
+| `:`           | Open vim-style command line                  |
 | `?`           | Toggle help drawer                           |
-| `q`           | Quit                                         |
+| `q` / `ZZ`    | Quit                                         |
 
 ## Configuration
 
@@ -108,7 +109,7 @@ editor: "nvim"
 
 ui:
   line_numbers: "hybrid"
-  theme: "default"
+  theme: "nord"
   diff_add_bg: "#2b3328" # Optional: Custom background for added lines
   diff_del_bg: "#4a2323" # Optional: Custom background for deleted lines
 ```
@@ -119,9 +120,50 @@ ui:
 | :---------------- | :-------------------------------------------- | :------------------------------------------------------- |
 | `editor`          | `$DIFI_EDITOR`, `$EDITOR`, `$VISUAL`, or `vi` | The editor to open when pressing `e` on a file.          |
 | `ui.line_numbers` | `"hybrid"`                                    | The style of line numbers in the diff view.              |
-| `ui.theme`        | `"default"`                                   | The core theme used for syntax highlighting.             |
+| `ui.theme`        | `"nord"`                                      | The vim colorscheme used for syntax highlighting and UI. |
 | `ui.diff_add_bg`  | `""`                                          | Hex code or terminal color for added line backgrounds.   |
 | `ui.diff_del_bg`  | `""`                                          | Hex code or terminal color for deleted line backgrounds. |
+
+## Command Line
+
+Press `:` to open a vim-style command line at the bottom of the screen. Available commands:
+
+| Command                    | Action                                      |
+| -------------------------- | ------------------------------------------- |
+| `:colorscheme <name>`      | Switch to a different theme                 |
+| `:theme <name>`            | Alias for `:colorscheme`                    |
+| `:q`, `:quit`              | Exit (same as pressing `q` in normal mode)  |
+
+Tab cycles through matching commands and theme names. Press `Esc` to cancel.
+
+### Available Themes
+
+| Theme               | Description        |
+| ------------------- | ------------------ |
+| `nord` *(default)*  | Nord dark          |
+| `gruvbox`           | Gruvbox dark       |
+| `catppuccin-mocha`  | Catppuccin Mocha   |
+| `catppuccin-latte`  | Catppuccin Latte   |
+| `dracula`           | Dracula            |
+| `monokai`           | Monokai            |
+| `onedark`           | OneDark            |
+| `github`            | GitHub Light       |
+| `github-dark`       | GitHub Dark        |
+| `rose-pine`         | Rosé Pine          |
+| `rose-pine-dawn`    | Rosé Pine Dawn     |
+| `solarized-dark`    | Solarized Dark     |
+| `tokyonight-night`  | Tokyo Night        |
+| `tokyonight-storm`  | Tokyo Night Storm  |
+| `evergarden`        | Evergarden         |
+| `doom-one`          | Doom One           |
+| `quiet`             | Quiet (minimal)    |
+
+Set a default theme in `~/.config/difi/config.yaml`:
+
+```yaml
+ui:
+  theme: "dracula"
+```
 
 ## Integrations
 
