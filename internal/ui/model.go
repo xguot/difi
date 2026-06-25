@@ -1,6 +1,7 @@
 package ui
 
 import (
+	_ "embed"
 	"regexp"
 	"strconv"
 	"strings"
@@ -13,6 +14,9 @@ import (
 	"github.com/xguot/difi/internal/tree"
 	"github.com/xguot/difi/internal/vcs"
 )
+
+//go:embed help.txt
+var helpText string
 
 type Focus int
 
@@ -69,6 +73,10 @@ type Model struct {
 	vcs       vcs.VCS
 
 	version string
+
+	// Full help buffer (vim-style :help)
+	helpMode  bool
+	helpLines []string
 
 	// Command-line mode (vim-style : prompt)
 	commandMode     bool
@@ -340,4 +348,21 @@ func (m *Model) updateSizes() {
 func (m *Model) updateTreeFocus() {
 	m.treeDelegate.Focused = (m.focus == FocusTree)
 	m.fileList.SetDelegate(m.treeDelegate)
+}
+
+// enterHelpMode switches to the full help buffer view.
+func (m *Model) enterHelpMode() {
+	text := strings.Replace(helpText, "<VERSION>", m.version, 1)
+	m.helpLines = strings.Split(text, "\n")
+	m.helpMode = true
+	m.showHelp = false
+	m.focus = FocusDiff
+	m.diffViewport.GotoTop()
+	m.updateTreeFocus()
+}
+
+// exitHelpMode returns from the help buffer to the normal diff view.
+func (m *Model) exitHelpMode() {
+	m.helpMode = false
+	m.helpLines = nil
 }

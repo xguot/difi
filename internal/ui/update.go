@@ -74,6 +74,39 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+		// ── Help buffer mode ─────────────────────────────────
+		if m.helpMode {
+			switch msg.String() {
+			case "q", "esc", "ctrl+c":
+				m.exitHelpMode()
+				return m, nil
+			case "j", "down":
+				m.diffViewport.LineDown(1)
+			case "k", "up":
+				m.diffViewport.LineUp(1)
+			case "ctrl+d":
+				m.diffViewport.HalfViewDown()
+			case "ctrl+u":
+				m.diffViewport.HalfViewUp()
+			case "g":
+				if m.inputBuffer == "g" {
+					m.diffViewport.GotoTop()
+					m.inputBuffer = ""
+				} else {
+					m.inputBuffer = "g"
+				}
+			case "G":
+				m.diffViewport.GotoBottom()
+				m.inputBuffer = ""
+			case "?":
+				m.showHelp = !m.showHelp
+				m.updateSizes()
+			default:
+				m.inputBuffer = ""
+			}
+			return m, nil
+		}
+
 		// ── Normal mode keys ──────────────────────────────────
 		if msg.String() == ":" {
 			m.commandMode = true
@@ -461,10 +494,9 @@ func (m *Model) executeCommand() (bool, tea.Cmd) {
 		return false, refreshCmd
 	}
 
-	// :help / :h — toggle help drawer
+	// :help / :h — open the full help buffer
 	if cmd == "help" || cmd == "h" {
-		m.showHelp = !m.showHelp
-		m.updateSizes()
+		m.enterHelpMode()
 		return false, nil
 	}
 

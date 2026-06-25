@@ -49,11 +49,15 @@ func (m Model) View() string {
 			Render(m.fileList.View())
 
 		var rightPaneView string
-		selectedItem, ok := m.fileList.SelectedItem().(tree.TreeItem)
 
-		if ok && selectedItem.IsDir {
-			rightPaneView = m.renderEmptyState(m.diffViewport.Width, contentHeight, "Directory: "+selectedItem.Name)
+		if m.helpMode {
+			rightPaneView = m.renderHelpBuffer(contentHeight)
 		} else {
+			selectedItem, ok := m.fileList.SelectedItem().(tree.TreeItem)
+
+			if ok && selectedItem.IsDir {
+				rightPaneView = m.renderEmptyState(m.diffViewport.Width, contentHeight, "Directory: "+selectedItem.Name)
+			} else {
 			var renderedDiff strings.Builder
 
 			viewportHeight := contentHeight
@@ -202,6 +206,7 @@ func (m Model) View() string {
 				Height(contentHeight).
 				MaxHeight(contentHeight).
 				Render(diffContentStr)
+			}
 		}
 
 		mainContent = lipgloss.JoinHorizontal(lipgloss.Top, treeView, rightPaneView)
@@ -360,6 +365,79 @@ func (m Model) renderHelpDrawer() string {
 	return S.HelpDrawerStyle.Copy().
 		Width(m.width).
 		Render(lipgloss.JoinVertical(lipgloss.Left, header, body))
+}
+
+// renderHelpBuffer renders the embedded help.txt in the right pane with
+// basic vimdoc-style highlighting: section dividers, tags, and subsections.
+func (m Model) renderHelpBuffer(contentHeight int) string {
+	if len(m.helpLines) == 0 {
+		return ""
+	}
+
+	t := ActiveTheme()
+
+	start := m.diffViewport.YOffset
+	end := start + contentHeight
+	if end > len(m.helpLines) {
+		end = len(m.helpLines)
+	}
+
+	maxLineWidth := m.diffViewport.Width - 2
+	if maxLineWidth < 1 {
+		maxLineWidth = 1
+	}
+
+	divStyle := lipgloss.NewStyle().Foreground(t.DimFg).Bold(true)
+	tagStyle := lipgloss.NewStyle().Foreground(t.FocusedBorder)
+	subStyle := lipgloss.NewStyle().Foreground(t.Fg).Bold(true)
+	bodyStyle := lipgloss.NewStyle().Foreground(t.Fg)
+
+	var rendered strings.Builder
+	for i := start; i < end; i++ {
+		line := m.helpLines[i]
+
+		// Section divider: =======================================
+		if strings.HasPrefix(line, "===") {
+			rendered.WriteString(divStyle.Render(ansi.Truncate(line, maxLineWidth, "")) + "\n")
+			continue
+		}
+
+		// Subsection header: > Text
+		if strings.HasPrefix(line, "> ") {
+			rest := ansi.Truncate(line, maxLineWidth, "")
+			rendered.WriteString(subStyle.Render(rest) + "\n")
+			continue
+		}
+
+		// Inline tags: *tag-name*
+		var styledLine strings.Builder
+		remaining := line
+		for {
+			star := strings.Index(remaining, "*")
+			if star == -1 {
+				styledLine.WriteString(bodyStyle.Render(ansi.Truncate(remaining, maxLineWidth-lipgloss.Width(styledLine.String()), "")))
+				break
+			}
+			// Text before the tag
+			styledLine.WriteString(bodyStyle.Render(remaining[:star]))
+			remaining = remaining[star+1:]
+			endStar := strings.Index(remaining, "*")
+			if endStar == -1 {
+				styledLine.WriteString(bodyStyle.Render("*" + ansi.Truncate(remaining, maxLineWidth-lipgloss.Width(styledLine.String()), "")))
+				break
+			}
+			tag := remaining[:endStar]
+			styledLine.WriteString(tagStyle.Render("*" + tag + "*"))
+			remaining = remaining[endStar+1:]
+		}
+		rendered.WriteString(styledLine.String() + "\n")
+	}
+
+	return S.DiffStyle.Copy().
+		Width(m.diffViewport.Width).
+		Height(contentHeight).
+		MaxHeight(contentHeight).
+		Render("\n" + strings.TrimRight(rendered.String(), "\n"))
 }
 
 func (m Model) renderEmptyState(w, h int, statusMsg string) string {
