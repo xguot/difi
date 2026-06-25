@@ -359,7 +359,9 @@ func (m *Model) enterHelpMode() {
 	m.showHelp = false
 	m.helpXOffset = 0
 	m.focus = FocusDiff
+	m.diffViewport.SetContent(text)
 	m.diffViewport.GotoTop()
+	m.updateSizes()
 	m.updateTreeFocus()
 }
 
@@ -367,4 +369,5 @@ func (m *Model) enterHelpMode() {
 func (m *Model) exitHelpMode() {
 	m.helpMode = false
 	m.helpLines = nil
+	m.helpXOffset = 0
 }
