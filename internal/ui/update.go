@@ -42,13 +42,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 
 			case "enter":
-				if m.executeCommand() {
-					m.commandMode = false
-					m.commandBuffer = ""
-					return m, tea.Quit
-				}
+				quit, cmd := m.executeCommand()
 				m.commandMode = false
 				m.commandBuffer = ""
+				if quit {
+					return m, tea.Quit
+				}
+				if cmd != nil {
+					return m, cmd
+				}
 				return m, nil
 
 			case "backspace":
@@ -430,49 +432,129 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // executeCommand parses and executes a vim-style command from the command buffer.
-// Returns true if the program should quit.
-func (m *Model) executeCommand() bool {
+// Returns (shouldQuit, asyncCmd). asyncCmd is non-nil when the command triggers
+// an async operation like re-reading a diff.
+func (m *Model) executeCommand() (bool, tea.Cmd) {
 	cmd := strings.TrimSpace(m.commandBuffer)
 	if cmd == "" {
-		return false
+		return false, nil
 	}
 
 	// :q / :quit — exit
 	if cmd == "q" || cmd == "quit" {
-		return true
+		return true, nil
+	}
+
+	// :w / :write — refresh the diff view
+	if cmd == "w" || cmd == "write" {
+		if m.selectedPath == "" {
+			return false, nil
+		}
+		var refreshCmd tea.Cmd
+		if m.pipedDiff != "" {
+			refreshCmd = func() tea.Msg {
+				return vcs.DiffMsg{Content: m.vcs.ExtractFileDiff(m.pipedDiff, m.selectedPath)}
+			}
+		} else {
+			refreshCmd = m.vcs.DiffCmd(m.targetBranch, m.selectedPath)
+		}
+		return false, refreshCmd
+	}
+
+	// :help / :h — toggle help drawer
+	if cmd == "help" || cmd == "h" {
+		m.showHelp = !m.showHelp
+		m.updateSizes()
+		return false, nil
+	}
+
+	// :noh / :nohlsearch — clear visual selection
+	if cmd == "noh" || cmd == "nohlsearch" {
+		m.visualMode = false
+		m.visualStart = 0
+		return false, nil
 	}
 
 	// :colorscheme <name> — switch theme
 	if strings.HasPrefix(cmd, "colorscheme ") {
 		name := strings.TrimSpace(strings.TrimPrefix(cmd, "colorscheme "))
 		if name == "" {
-			return false
+			return false, nil
 		}
 		cfg := m.treeDelegate.Config
 		cfg.UI.Theme = name
 		m.treeDelegate.Config = cfg
 		ReinitStyles(cfg)
-		return false
+		return false, nil
 	}
 
 	// :theme <name> — alias for :colorscheme
 	if strings.HasPrefix(cmd, "theme ") {
 		name := strings.TrimSpace(strings.TrimPrefix(cmd, "theme "))
 		if name == "" {
-			return false
+			return false, nil
 		}
 		cfg := m.treeDelegate.Config
 		cfg.UI.Theme = name
 		m.treeDelegate.Config = cfg
 		ReinitStyles(cfg)
-		return false
+		return false, nil
 	}
 
-	return false
+	// :set <option> — live config changes
+	if strings.HasPrefix(cmd, "set ") {
+		m.executeSet(strings.TrimSpace(strings.TrimPrefix(cmd, "set ")))
+		return false, nil
+	}
+
+	// :$ — jump to last diff line
+	if cmd == "$" {
+		m.diffCursor = m.snapCursor(len(m.diffLines)-1, -1)
+		m.centerDiffCursor()
+		return false, nil
+	}
+
+	// :<number> — jump to line N in the diff
+	if num, err := strconv.Atoi(cmd); err == nil && num > 0 {
+		m.diffCursor = m.snapCursor(num-1, 1)
+		m.centerDiffCursor()
+		return false, nil
+	}
+
+	return false, nil
+}
+
+// executeSet handles :set <option> commands for live configuration changes.
+func (m *Model) executeSet(opt string) {
+	switch opt {
+	case "number", "nu":
+		m.treeDelegate.Config.UI.LineNumbers = "absolute"
+	case "nonumber", "nonu":
+		m.treeDelegate.Config.UI.LineNumbers = "hidden"
+	case "relativenumber", "rnu":
+		m.treeDelegate.Config.UI.LineNumbers = "relative"
+	case "norelativenumber", "nornu":
+		m.treeDelegate.Config.UI.LineNumbers = "absolute"
+	case "hybrid":
+		m.treeDelegate.Config.UI.LineNumbers = "hybrid"
+	case "relative":
+		m.treeDelegate.Config.UI.LineNumbers = "relative"
+	case "absolute":
+		m.treeDelegate.Config.UI.LineNumbers = "absolute"
+	case "hidden":
+		m.treeDelegate.Config.UI.LineNumbers = "hidden"
+	}
 }
 
 // commandNames is the set of completable command names (without the leading colon).
-var commandNames = []string{"colorscheme", "theme", "q", "quit"}
+var commandNames = []string{"colorscheme", "theme", "q", "quit", "w", "write", "help", "h", "noh", "nohlsearch", "set"}
+
+// setOptionNames is the set of completable :set option values.
+var setOptionNames = []string{
+	"number", "nonumber", "nu", "nonu",
+	"relativenumber", "norelativenumber", "rnu", "nornu",
+	"hybrid", "relative", "absolute", "hidden",
+}
 
 // tabComplete handles vim-style tab cycling through matching completions.
 // Supports command names (e.g. :col → :colorscheme) and theme values
@@ -491,6 +573,11 @@ func (m *Model) tabComplete() {
 		prefix = "theme "
 		partial = strings.TrimPrefix(m.commandBuffer, "theme ")
 		m.cycleThemeNames(prefix, partial)
+		return
+	case strings.HasPrefix(m.commandBuffer, "set "):
+		prefix = "set "
+		partial = strings.TrimPrefix(m.commandBuffer, "set ")
+		m.cycleSetOptions(prefix, partial)
 		return
 	default:
 		// Completing command name itself (e.g. :col → :colorscheme)
@@ -548,6 +635,28 @@ func (m *Model) cycleCommandNames() {
 
 	idx := m.tabCycleIndex % len(matches)
 	m.commandBuffer = matches[idx]
+	m.tabCycleIndex = idx + 1
+}
+
+// cycleSetOptions cycles through matching :set option names.
+func (m *Model) cycleSetOptions(prefix, partial string) {
+	var matches []string
+	for _, name := range setOptionNames {
+		if strings.HasPrefix(name, partial) {
+			matches = append(matches, name)
+		}
+	}
+	if len(matches) == 0 {
+		return
+	}
+
+	if partial != m.tabCyclePartial {
+		m.tabCycleIndex = 0
+		m.tabCyclePartial = partial
+	}
+
+	idx := m.tabCycleIndex % len(matches)
+	m.commandBuffer = prefix + matches[idx]
 	m.tabCycleIndex = idx + 1
 }
 

@@ -117,7 +117,10 @@ func (m Model) View() string {
 				}
 
 				var numStr string
-				mode := "relative"
+				mode := m.treeDelegate.Config.UI.LineNumbers
+				if mode == "" {
+					mode = "hybrid"
+				}
 
 				if mode != "hidden" {
 					if isCursor && mode == "hybrid" {
