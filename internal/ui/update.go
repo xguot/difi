@@ -84,10 +84,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.diffViewport.LineDown(1)
 			case "k", "up":
 				m.diffViewport.LineUp(1)
+			case "h", "left":
+				if m.helpXOffset > 0 {
+					m.helpXOffset -= 4
+				}
+			case "l", "right":
+				m.helpXOffset += 4
+			case "H":
+				m.diffViewport.GotoTop()
+			case "M":
+				mid := len(m.helpLines)/2 - m.diffViewport.Height/2
+				if mid < 0 {
+					mid = 0
+				}
+				m.diffViewport.SetYOffset(mid)
+			case "L":
+				m.diffViewport.GotoBottom()
 			case "ctrl+d":
 				m.diffViewport.HalfViewDown()
 			case "ctrl+u":
 				m.diffViewport.HalfViewUp()
+			case "ctrl+f", "pgdown":
+				m.diffViewport.ViewDown()
+			case "ctrl+b", "pgup":
+				m.diffViewport.ViewUp()
 			case "g":
 				if m.inputBuffer == "g" {
 					m.diffViewport.GotoTop()

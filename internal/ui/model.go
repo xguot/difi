@@ -75,8 +75,9 @@ type Model struct {
 	version string
 
 	// Full help buffer (vim-style :help)
-	helpMode  bool
-	helpLines []string
+	helpMode    bool
+	helpLines   []string
+	helpXOffset int
 
 	// Command-line mode (vim-style : prompt)
 	commandMode     bool
@@ -356,6 +357,7 @@ func (m *Model) enterHelpMode() {
 	m.helpLines = strings.Split(text, "\n")
 	m.helpMode = true
 	m.showHelp = false
+	m.helpXOffset = 0
 	m.focus = FocusDiff
 	m.diffViewport.GotoTop()
 	m.updateTreeFocus()

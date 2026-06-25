@@ -393,16 +393,26 @@ func (m Model) renderHelpBuffer(w, contentHeight int) string {
 
 	var rendered strings.Builder
 	for i := start; i < end; i++ {
-		line := m.helpLines[i]
+		rawLine := m.helpLines[i]
+
+		// Check style before horizontal scroll offset
+		isDivider := strings.HasPrefix(rawLine, "───") || strings.HasPrefix(rawLine, "===")
+		isSubHeader := strings.HasPrefix(rawLine, "> ")
+
+		// Apply horizontal scroll offset
+		line := rawLine
+		if m.helpXOffset > 0 && len(line) > m.helpXOffset {
+			line = line[m.helpXOffset:]
+		}
 
 		// Section divider: ──────────────────────────────
-		if strings.HasPrefix(line, "───") || strings.HasPrefix(line, "===") {
+		if isDivider {
 			rendered.WriteString(divStyle.Render(ansi.Truncate(line, maxLineWidth, "")) + "\n")
 			continue
 		}
 
 		// Subsection header: > Text
-		if strings.HasPrefix(line, "> ") {
+		if isSubHeader {
 			rest := ansi.Truncate(line, maxLineWidth, "")
 			rendered.WriteString(subStyle.Render(rest) + "\n")
 			continue
