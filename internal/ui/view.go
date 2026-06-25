@@ -320,108 +320,98 @@ func (m Model) renderCmdLine() string {
 }
 
 func (m Model) renderHelpDrawer() string {
-	col1 := lipgloss.JoinVertical(lipgloss.Left,
-		S.HelpTextStyle.Render("↑/k   Move Up"),
-		S.HelpTextStyle.Render("↓/j   Move Down"),
+	t := ActiveTheme()
+	pad := lipgloss.NewStyle().Width(3).Render("")
+
+	header := lipgloss.NewStyle().
+		Foreground(t.Fg).
+		Bold(true).
+		Render(" difi help")
+
+	div := lipgloss.NewStyle().
+		Foreground(t.DimFg).
+		Render("│")
+
+	nav := lipgloss.JoinVertical(lipgloss.Left,
+		S.HelpTextStyle.Render("↑/k  ↓/j     Move up / down"),
+		S.HelpTextStyle.Render("←/h  →/l     Focus tree / diff"),
+		S.HelpTextStyle.Render("Tab          Toggle focus"),
+		S.HelpTextStyle.Render("gg  G        First / last line"),
+		S.HelpTextStyle.Render("C-d  C-u     Page down / up"),
+		S.HelpTextStyle.Render("H  M  L      Cursor top / mid / bot"),
+		S.HelpTextStyle.Render("zz  zt  zb   Center / top / bottom scroll"),
 	)
-	col2 := lipgloss.JoinVertical(lipgloss.Left,
-		S.HelpTextStyle.Render("←/h   Left Panel"),
-		S.HelpTextStyle.Render("→/l   Right Panel"),
+
+	edit := lipgloss.JoinVertical(lipgloss.Left,
+		S.HelpTextStyle.Render("e / Enter    Edit file at cursor"),
+		S.HelpTextStyle.Render("V            Visual selection mode"),
+		S.HelpTextStyle.Render("f            Toggle flat tree mode"),
+		S.HelpTextStyle.Render("esc          Cancel visual mode"),
 	)
-	col3 := lipgloss.JoinVertical(lipgloss.Left,
-		S.HelpTextStyle.Render("C-d/u Page Dn/Up"),
-		S.HelpTextStyle.Render("zz/zt Scroll View"),
+
+	cmds := lipgloss.JoinVertical(lipgloss.Left,
+		S.HelpTextStyle.Render(":colorscheme Switch theme"),
+		S.HelpTextStyle.Render(":set <opt>   Change setting"),
+		S.HelpTextStyle.Render(":w           Refresh diff"),
+		S.HelpTextStyle.Render(":noh         Clear highlight"),
+		S.HelpTextStyle.Render(":<num>  :$   Jump to line"),
+		S.HelpTextStyle.Render(":help :h     This help"),
 	)
-	col4 := lipgloss.JoinVertical(lipgloss.Left,
-		S.HelpTextStyle.Render("H/M/L Move Cursor"),
-		S.HelpTextStyle.Render("e     Edit File"),
+
+	quit := lipgloss.JoinVertical(lipgloss.Left,
+		S.HelpTextStyle.Render("q  ZZ        Quit"),
+		S.HelpTextStyle.Render(":q :quit     Quit (cmd)"),
+		S.HelpTextStyle.Render("Ctrl+C       Force quit"),
 	)
-	col5 := lipgloss.JoinVertical(lipgloss.Left,
-		S.HelpTextStyle.Render("V     Visual Mode"),
-		S.HelpTextStyle.Render("f     Flat Mode"),
-		S.HelpTextStyle.Render(":     Command"),
-		S.HelpTextStyle.Render("esc   Cancel Visual"),
+
+	body := lipgloss.JoinHorizontal(lipgloss.Top,
+		nav, pad,
+		div, pad,
+		edit, pad,
+		div, pad,
+		cmds, pad,
+		div, pad,
+		quit,
 	)
 
 	return S.HelpDrawerStyle.Copy().
 		Width(m.width).
-		Render(lipgloss.JoinHorizontal(lipgloss.Top,
-			col1, lipgloss.NewStyle().Width(4).Render(""),
-			col2, lipgloss.NewStyle().Width(4).Render(""),
-			col3, lipgloss.NewStyle().Width(4).Render(""),
-			col4, lipgloss.NewStyle().Width(4).Render(""),
-			col5,
-		))
+		Render(lipgloss.JoinVertical(lipgloss.Left, header, body))
 }
 
 func (m Model) renderEmptyState(w, h int, statusMsg string) string {
-	logo := S.EmptyLogoStyle.Render("difi")
-	desc := S.EmptyDescStyle.Render("A calm, focused way to review Git & Mercurial diffs.")
-	status := S.EmptyStatusStyle.Render(statusMsg)
-
 	t := ActiveTheme()
-	usageHeader := S.EmptyHeaderStyle.Render("Usage Patterns")
-	cmd1 := lipgloss.NewStyle().Foreground(t.Fg).Render("difi")
-	desc1 := S.EmptyCodeStyle.Render("Auto-detect VCS, diff against main/tip")
-	cmd2 := lipgloss.NewStyle().Foreground(t.Fg).Render("difi --vcs git")
-	desc2 := S.EmptyCodeStyle.Render("Force Git mode")
-	cmd3 := lipgloss.NewStyle().Foreground(t.Fg).Render("difi --vcs hg")
-	desc3 := S.EmptyCodeStyle.Render("Force Mercurial mode")
 
-	usageBlock := lipgloss.JoinVertical(lipgloss.Left,
-		usageHeader,
-		lipgloss.JoinHorizontal(lipgloss.Left, cmd1, "    ", desc1),
-		lipgloss.JoinHorizontal(lipgloss.Left, cmd2, "    ", desc2),
-		lipgloss.JoinHorizontal(lipgloss.Left, cmd3, "    ", desc3),
-	)
+	// Vim-style startup screen: centered, minimal, with version and commands
+	logo := S.EmptyLogoStyle.Render("difi")
+	spacer := lipgloss.NewStyle().Height(1).Render("")
 
-	navHeader := S.EmptyHeaderStyle.Render("Navigation")
-	key1 := lipgloss.NewStyle().Foreground(t.Fg).Render("Tab")
-	key2 := lipgloss.NewStyle().Foreground(t.Fg).Render("j/k")
-	keyDesc1 := S.EmptyCodeStyle.Render("Switch panels")
-	keyDesc2 := S.EmptyCodeStyle.Render("Move cursor")
+	versionLine := S.EmptyDescStyle.Render("version " + m.version)
+	creditLine := S.EmptyStatusStyle.Render("by Xiyuan Guo et al.")
+	ossLine := S.EmptyStatusStyle.Render("difi is open source and freely distributable")
 
-	navBlock := lipgloss.JoinVertical(lipgloss.Left,
-		navHeader,
-		lipgloss.JoinHorizontal(lipgloss.Left, key1, "    ", keyDesc1),
-		lipgloss.JoinHorizontal(lipgloss.Left, key2, "    ", keyDesc2),
-	)
-
-	nvimHeader := S.EmptyHeaderStyle.Render("Neovim Integration")
-	nvim1 := lipgloss.NewStyle().Foreground(t.Fg).Render("xguot/difi.nvim")
-	nvimDesc1 := S.EmptyCodeStyle.Render("Install plugin")
-	nvim2 := lipgloss.NewStyle().Foreground(t.Fg).Render("Press 'e'")
-	nvimDesc2 := S.EmptyCodeStyle.Render("Edit with context")
-
-	nvimBlock := lipgloss.JoinVertical(lipgloss.Left,
-		nvimHeader,
-		lipgloss.JoinHorizontal(lipgloss.Left, nvim1, "  ", nvimDesc1),
-		lipgloss.JoinHorizontal(lipgloss.Left, nvim2, "          ", nvimDesc2),
-	)
-
-	var guides string
-	if w > 80 {
-		guides = lipgloss.JoinHorizontal(lipgloss.Top,
-			usageBlock, lipgloss.NewStyle().Width(6).Render(""),
-			navBlock, lipgloss.NewStyle().Width(6).Render(""),
-			nvimBlock,
-		)
-	} else {
-		topRow := lipgloss.JoinHorizontal(lipgloss.Top, usageBlock, lipgloss.NewStyle().Width(4).Render(""), navBlock)
-		guides = lipgloss.JoinVertical(lipgloss.Left,
-			topRow,
-			lipgloss.NewStyle().Height(1).Render(""),
-			nvimBlock,
-		)
+	statusLine := ""
+	if statusMsg != "" {
+		statusLine = S.EmptyStatusStyle.Render(statusMsg)
 	}
 
-	content := lipgloss.JoinVertical(lipgloss.Center,
-		logo,
-		desc,
-		status,
-		lipgloss.NewStyle().Height(1).Render(""),
-		guides,
-	)
+	cmdStyle := S.EmptyCodeStyle
+	keyStyle := lipgloss.NewStyle().Foreground(t.Fg)
+
+	cmdHelp := cmdStyle.Render("type  ") + keyStyle.Render(":help") + cmdStyle.Render("       for help")
+	cmdQuit := cmdStyle.Render("type  ") + keyStyle.Render(":q") + cmdStyle.Render("          to exit")
+	cmdTheme := cmdStyle.Render("type  ") + keyStyle.Render(":colorscheme") + cmdStyle.Render(" to change theme")
+
+	var blocks []string
+	blocks = append(blocks, logo, spacer, versionLine, creditLine, ossLine)
+
+	if statusLine != "" {
+		blocks = append(blocks, spacer, statusLine)
+	}
+
+	blocks = append(blocks, spacer, cmdHelp, cmdQuit, cmdTheme)
+
+	content := lipgloss.JoinVertical(lipgloss.Center, blocks...)
 
 	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, content)
 }

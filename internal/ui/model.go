@@ -68,6 +68,8 @@ type Model struct {
 	pipedDiff string
 	vcs       vcs.VCS
 
+	version string
+
 	// Command-line mode (vim-style : prompt)
 	commandMode     bool
 	commandBuffer   string
@@ -79,7 +81,7 @@ type Model struct {
 	shouldQuit bool
 }
 
-func NewModel(cfg config.Config, targetBranch string, pipedDiff string, vcsClient vcs.VCS, flatMode bool) Model {
+func NewModel(cfg config.Config, targetBranch string, pipedDiff string, vcsClient vcs.VCS, flatMode bool, version string) Model {
 	InitStyles(cfg)
 
 	var files []string
@@ -119,6 +121,7 @@ func NewModel(cfg config.Config, targetBranch string, pipedDiff string, vcsClien
 		pendingZ:      false,
 		pipedDiff:     pipedDiff,
 		vcs:           vcsClient,
+		version:       version,
 		visualMode:    false,
 		visualStart:   0,
 		commandMode:   false,
@@ -305,7 +308,7 @@ func (m *Model) centerDiffCursor() {
 func (m *Model) updateSizes() {
 	reservedHeight := 2
 	if m.showHelp {
-		reservedHeight += 6
+		reservedHeight += 12
 	}
 
 	contentHeight := m.height - reservedHeight

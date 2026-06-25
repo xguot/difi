@@ -98,7 +98,7 @@ func main() {
 		}
 	}
 
-	p := tea.NewProgram(ui.NewModel(cfg, target, pipedDiff, vcsClient, *flat), opts...)
+	p := tea.NewProgram(ui.NewModel(cfg, target, pipedDiff, vcsClient, *flat, version), opts...)
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Error: %v\n", err)
 		os.Exit(1)
