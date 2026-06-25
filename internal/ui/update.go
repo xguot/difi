@@ -32,9 +32,68 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.KeyMsg:
+		// ── Command-line mode ──────────────────────────────────
+		if m.commandMode {
+			switch msg.String() {
+			case "esc", "ctrl+c":
+				m.commandMode = false
+				m.commandBuffer = ""
+				m.resetTabCycle()
+				return m, nil
+
+			case "enter":
+				if m.executeCommand() {
+					m.commandMode = false
+					m.commandBuffer = ""
+					return m, tea.Quit
+				}
+				m.commandMode = false
+				m.commandBuffer = ""
+				return m, nil
+
+			case "backspace":
+				if len(m.commandBuffer) > 0 {
+					m.commandBuffer = m.commandBuffer[:len(m.commandBuffer)-1]
+				}
+				m.resetTabCycle()
+				return m, nil
+
+			case "tab":
+				m.tabComplete()
+				return m, nil
+
+			default:
+				// Only accept printable single characters
+				if len(msg.String()) == 1 && msg.String() >= " " {
+					m.commandBuffer += msg.String()
+					m.resetTabCycle()
+				}
+				return m, nil
+			}
+		}
+
+		// ── Normal mode keys ──────────────────────────────────
+		if msg.String() == ":" {
+			m.commandMode = true
+			m.commandBuffer = ""
+			m.pendingZZ = false
+			m.resetTabCycle()
+			return m, nil
+		}
+
 		if msg.String() == "q" || msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
+
+		// ZZ — press Z twice in normal mode to quit
+		if msg.String() == "Z" {
+			if m.pendingZZ {
+				return m, tea.Quit
+			}
+			m.pendingZZ = true
+			return m, nil
+		}
+		m.pendingZZ = false
 
 		if msg.String() == "?" {
 			m.showHelp = !m.showHelp
@@ -296,6 +355,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		isGitTheme := m.treeDelegate.Config.UI.Theme == "git"
 
+		// Determine Chroma theme name from active ThemeColors
+		t := ActiveTheme()
+		chromaStyle := "nord"
+		if t != nil && !isGitTheme {
+			chromaStyle = t.ChromaStyle
+		}
+
 		for _, line := range fullLines {
 			cleanLine := stripAnsi(line)
 
@@ -327,7 +393,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				hlLines = append(hlLines, codeContent)
 			} else {
 				var buf strings.Builder
-				err := quick.Highlight(&buf, codeContent, ext, "terminal16m", "nord")
+				err := quick.Highlight(&buf, codeContent, ext, "terminal16m", chromaStyle)
 				if err == nil && buf.String() != "" {
 					hlLines = append(hlLines, strings.TrimSuffix(buf.String(), "\n"))
 				} else {
@@ -361,4 +427,132 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, tea.Batch(cmds...)
+}
+
+// executeCommand parses and executes a vim-style command from the command buffer.
+// Returns true if the program should quit.
+func (m *Model) executeCommand() bool {
+	cmd := strings.TrimSpace(m.commandBuffer)
+	if cmd == "" {
+		return false
+	}
+
+	// :q / :quit — exit
+	if cmd == "q" || cmd == "quit" {
+		return true
+	}
+
+	// :colorscheme <name> — switch theme
+	if strings.HasPrefix(cmd, "colorscheme ") {
+		name := strings.TrimSpace(strings.TrimPrefix(cmd, "colorscheme "))
+		if name == "" {
+			return false
+		}
+		cfg := m.treeDelegate.Config
+		cfg.UI.Theme = name
+		m.treeDelegate.Config = cfg
+		ReinitStyles(cfg)
+		return false
+	}
+
+	// :theme <name> — alias for :colorscheme
+	if strings.HasPrefix(cmd, "theme ") {
+		name := strings.TrimSpace(strings.TrimPrefix(cmd, "theme "))
+		if name == "" {
+			return false
+		}
+		cfg := m.treeDelegate.Config
+		cfg.UI.Theme = name
+		m.treeDelegate.Config = cfg
+		ReinitStyles(cfg)
+		return false
+	}
+
+	return false
+}
+
+// commandNames is the set of completable command names (without the leading colon).
+var commandNames = []string{"colorscheme", "theme", "q", "quit"}
+
+// tabComplete handles vim-style tab cycling through matching completions.
+// Supports command names (e.g. :col → :colorscheme) and theme values
+// (e.g. :colorscheme gr → :colorscheme gruvbox). Repeated Tab cycles through
+// all matches; typing resets the cycle.
+func (m *Model) tabComplete() {
+	// Detect which prefix we're completing under
+	var prefix, partial string
+	switch {
+	case strings.HasPrefix(m.commandBuffer, "colorscheme "):
+		prefix = "colorscheme "
+		partial = strings.TrimPrefix(m.commandBuffer, "colorscheme ")
+		m.cycleThemeNames(prefix, partial)
+		return
+	case strings.HasPrefix(m.commandBuffer, "theme "):
+		prefix = "theme "
+		partial = strings.TrimPrefix(m.commandBuffer, "theme ")
+		m.cycleThemeNames(prefix, partial)
+		return
+	default:
+		// Completing command name itself (e.g. :col → :colorscheme)
+		m.cycleCommandNames()
+		return
+	}
+}
+
+// cycleThemeNames cycles through matching theme names for tab completion.
+func (m *Model) cycleThemeNames(prefix, partial string) {
+
+	names := ThemeNames()
+
+	// Collect all matching names
+	var matches []string
+	for _, name := range names {
+		if strings.HasPrefix(name, partial) {
+			matches = append(matches, name)
+		}
+	}
+	if len(matches) == 0 {
+		return
+	}
+
+	// If the partial changed (user typed), reset cycle
+	if partial != m.tabCyclePartial {
+		m.tabCycleIndex = 0
+		m.tabCyclePartial = partial
+	}
+
+	// Cycle to next match
+	idx := m.tabCycleIndex % len(matches)
+	m.commandBuffer = prefix + matches[idx]
+	m.tabCycleIndex = idx + 1
+}
+
+// cycleCommandNames cycles through matching command names (e.g. :col → :colorscheme).
+func (m *Model) cycleCommandNames() {
+	partial := m.commandBuffer
+
+	var matches []string
+	for _, name := range commandNames {
+		if strings.HasPrefix(name, partial) {
+			matches = append(matches, name)
+		}
+	}
+	if len(matches) == 0 {
+		return
+	}
+
+	if partial != m.tabCyclePartial {
+		m.tabCycleIndex = 0
+		m.tabCyclePartial = partial
+	}
+
+	idx := m.tabCycleIndex % len(matches)
+	m.commandBuffer = matches[idx]
+	m.tabCycleIndex = idx + 1
+}
+
+// resetTabCycle resets tab-completion state (called when user edits the buffer).
+func (m *Model) resetTabCycle() {
+	m.tabCycleIndex = 0
+	m.tabCyclePartial = ""
 }

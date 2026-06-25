@@ -53,8 +53,8 @@ type Model struct {
 	diffLines       []string
 	diffHighlighted []string
 	diffCursor      int
-	visualMode      bool // Visual selection mode
-	visualStart     int  // Anchor for visual selection
+	visualMode      bool
+	visualStart     int
 
 	inputBuffer string
 	pendingZ    bool
@@ -67,6 +67,16 @@ type Model struct {
 
 	pipedDiff string
 	vcs       vcs.VCS
+
+	// Command-line mode (vim-style : prompt)
+	commandMode     bool
+	commandBuffer   string
+	tabCycleIndex   int    // tracks cycling position for tab completion
+	tabCyclePartial string // the partial that was being completed
+
+	// ZZ quit (vim-style: press Z twice in normal mode to quit)
+	pendingZZ bool
+	shouldQuit bool
 }
 
 func NewModel(cfg config.Config, targetBranch string, pipedDiff string, vcsClient vcs.VCS, flatMode bool) Model {
@@ -111,6 +121,8 @@ func NewModel(cfg config.Config, targetBranch string, pipedDiff string, vcsClien
 		vcs:           vcsClient,
 		visualMode:    false,
 		visualStart:   0,
+		commandMode:   false,
+		commandBuffer: "",
 	}
 
 	for idx, item := range items {

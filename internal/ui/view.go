@@ -20,10 +20,12 @@ func (m Model) View() string {
 	topBar := m.renderTopBar()
 
 	var bottomBar string
-	if m.showHelp {
+	if m.commandMode {
+		bottomBar = m.renderCmdLine()
+	} else if m.showHelp {
 		bottomBar = m.renderHelpDrawer()
 	} else {
-		bottomBar = m.viewStatusBar()
+		bottomBar = m.renderStatusBar()
 	}
 
 	contentHeight := m.height - lipgloss.Height(topBar) - lipgloss.Height(bottomBar)
@@ -35,9 +37,9 @@ func (m Model) View() string {
 	if len(m.fileList.Items()) == 0 {
 		mainContent = m.renderEmptyState(m.width, contentHeight, "No changes found against "+m.targetBranch)
 	} else {
-		treeStyle := PaneStyle
+		treeStyle := S.PaneStyle
 		if m.focus == FocusTree {
-			treeStyle = FocusedPaneStyle
+			treeStyle = S.FocusedPaneStyle
 		}
 
 		treeView := treeStyle.Copy().
@@ -133,7 +135,7 @@ func (m Model) View() string {
 
 				lineNumRendered := ""
 				if numStr != "" {
-					lineNumRendered = LineNumberStyle.Render(numStr)
+					lineNumRendered = S.LineNumberStyle.Render(numStr)
 				}
 
 				var line string
@@ -147,11 +149,11 @@ func (m Model) View() string {
 					}
 
 					if isAdd {
-						line = CursorAddStyle.Copy().Width(maxLineWidth).Render(fullStr)
+						line = S.CursorAddStyle.Copy().Width(maxLineWidth).Render(fullStr)
 					} else if isDel {
-						line = CursorDelStyle.Copy().Width(maxLineWidth).Render(fullStr)
+						line = S.CursorDelStyle.Copy().Width(maxLineWidth).Render(fullStr)
 					} else {
-						line = CursorNormalStyle.Copy().Width(maxLineWidth).Render(fullStr)
+						line = S.CursorNormalStyle.Copy().Width(maxLineWidth).Render(fullStr)
 					}
 				} else {
 					var hlCode string
@@ -166,7 +168,7 @@ func (m Model) View() string {
 							gutter = lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Render(gutterStr)
 						} else {
 							hlCode = codeContent
-							gutter = DiffCtxGutter.Render(gutterStr)
+							gutter = S.DiffCtxGutter.Render(gutterStr)
 						}
 					} else {
 						if i < len(m.diffHighlighted) {
@@ -175,11 +177,11 @@ func (m Model) View() string {
 						}
 
 						if isAdd {
-							gutter = DiffAddGutter.Render(gutterStr)
+							gutter = S.DiffAddGutter.Render(gutterStr)
 						} else if isDel {
-							gutter = DiffDelGutter.Render(gutterStr)
+							gutter = S.DiffDelGutter.Render(gutterStr)
 						} else {
-							gutter = DiffCtxGutter.Render(gutterStr)
+							gutter = S.DiffCtxGutter.Render(gutterStr)
 						}
 					}
 
@@ -192,7 +194,7 @@ func (m Model) View() string {
 
 			diffContentStr := "\n" + strings.TrimRight(renderedDiff.String(), "\n")
 
-			rightPaneView = DiffStyle.Copy().
+			rightPaneView = S.DiffStyle.Copy().
 				Width(m.diffViewport.Width).
 				Height(contentHeight).
 				MaxHeight(contentHeight).
@@ -217,7 +219,7 @@ func (m Model) renderTopBar() string {
 	}
 
 	info := fmt.Sprintf(" %s:%s  %s ➜ %s%s", m.repoName, vcsType, m.currentBranch, m.targetBranch, repoStats)
-	leftSide := TopInfoStyle.Render(info)
+	leftSide := S.TopInfoStyle.Render(info)
 
 	rightSide := ""
 	if selectedItem, ok := m.fileList.SelectedItem().(tree.TreeItem); ok {
@@ -246,8 +248,8 @@ func (m Model) renderTopBar() string {
 
 		fileStats := ""
 		if statsAdded > 0 || statsDeleted > 0 {
-			added := TopStatsAddedStyle.Render(fmt.Sprintf("+%d", statsAdded))
-			deleted := TopStatsDeletedStyle.Render(fmt.Sprintf("-%d", statsDeleted))
+			added := S.TopStatsAddedStyle.Render(fmt.Sprintf("+%d", statsAdded))
+			deleted := S.TopStatsDeletedStyle.Render(fmt.Sprintf("-%d", statsDeleted))
 			fileStats = lipgloss.JoinHorizontal(lipgloss.Center, added, deleted)
 		}
 
@@ -273,48 +275,72 @@ func (m Model) renderTopBar() string {
 	padding := strings.Repeat(" ", availWidth)
 	finalBar := lipgloss.JoinHorizontal(lipgloss.Top, leftSide, padding, rightSide)
 
-	return TopBarStyle.Width(m.width).Render(finalBar)
+	return S.TopBarStyle.Width(m.width).Render(finalBar)
 }
 
-func (m Model) viewStatusBar() string {
-	shortcutsStyle := StatusKeyStyle.Copy().Background(nord0)
-	shortcuts := shortcutsStyle.Render("? Help  q Quit  Tab Switch  V Visual  f Flat")
+// renderStatusBar renders the default bottom status line with shortcut hints.
+func (m Model) renderStatusBar() string {
+	t := ActiveTheme()
+	shortcutsStyle := S.StatusKeyStyle.Copy().Background(t.StatusBarBg)
+	shortcuts := shortcutsStyle.Render("? Help  q Quit  Tab Switch  V Visual  f Flat  : Cmd")
 
 	availWidth := m.width - lipgloss.Width(shortcuts)
 	if availWidth < 0 {
 		availWidth = 0
 	}
 
-	paddingStyle := lipgloss.NewStyle().Background(nord0)
+	paddingStyle := lipgloss.NewStyle().Background(t.StatusBarBg)
 	padding := paddingStyle.Render(strings.Repeat(" ", availWidth))
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, shortcuts, padding)
 }
 
+// renderCmdLine renders a vim-style command-line at the bottom.
+func (m Model) renderCmdLine() string {
+	prompt := S.CmdLinePrompt.Render(":")
+	text := S.CmdLineStyle.Render(m.commandBuffer)
+
+	// Blinking cursor
+	cursor := S.CmdLineCursor.Render(" ")
+
+	line := prompt + text + cursor
+
+	// Pad to full width
+	lineWidth := lipgloss.Width(line)
+	if lineWidth < m.width {
+		t := ActiveTheme()
+		padStyle := lipgloss.NewStyle().Background(t.CmdLineBg)
+		line += padStyle.Render(strings.Repeat(" ", m.width-lineWidth))
+	}
+
+	return S.CmdLineStyle.Copy().Width(m.width).Render(line)
+}
+
 func (m Model) renderHelpDrawer() string {
 	col1 := lipgloss.JoinVertical(lipgloss.Left,
-		HelpTextStyle.Render("↑/k   Move Up"),
-		HelpTextStyle.Render("↓/j   Move Down"),
+		S.HelpTextStyle.Render("↑/k   Move Up"),
+		S.HelpTextStyle.Render("↓/j   Move Down"),
 	)
 	col2 := lipgloss.JoinVertical(lipgloss.Left,
-		HelpTextStyle.Render("←/h   Left Panel"),
-		HelpTextStyle.Render("→/l   Right Panel"),
+		S.HelpTextStyle.Render("←/h   Left Panel"),
+		S.HelpTextStyle.Render("→/l   Right Panel"),
 	)
 	col3 := lipgloss.JoinVertical(lipgloss.Left,
-		HelpTextStyle.Render("C-d/u Page Dn/Up"),
-		HelpTextStyle.Render("zz/zt Scroll View"),
+		S.HelpTextStyle.Render("C-d/u Page Dn/Up"),
+		S.HelpTextStyle.Render("zz/zt Scroll View"),
 	)
 	col4 := lipgloss.JoinVertical(lipgloss.Left,
-		HelpTextStyle.Render("H/M/L Move Cursor"),
-		HelpTextStyle.Render("e     Edit File"),
+		S.HelpTextStyle.Render("H/M/L Move Cursor"),
+		S.HelpTextStyle.Render("e     Edit File"),
 	)
 	col5 := lipgloss.JoinVertical(lipgloss.Left,
-		HelpTextStyle.Render("V     Visual Mode"),
-		HelpTextStyle.Render("f     Flat Mode"),
-		HelpTextStyle.Render("esc   Cancel Visual"),
+		S.HelpTextStyle.Render("V     Visual Mode"),
+		S.HelpTextStyle.Render("f     Flat Mode"),
+		S.HelpTextStyle.Render(":     Command"),
+		S.HelpTextStyle.Render("esc   Cancel Visual"),
 	)
 
-	return HelpDrawerStyle.Copy().
+	return S.HelpDrawerStyle.Copy().
 		Width(m.width).
 		Render(lipgloss.JoinHorizontal(lipgloss.Top,
 			col1, lipgloss.NewStyle().Width(4).Render(""),
@@ -326,17 +352,18 @@ func (m Model) renderHelpDrawer() string {
 }
 
 func (m Model) renderEmptyState(w, h int, statusMsg string) string {
-	logo := EmptyLogoStyle.Render("difi")
-	desc := EmptyDescStyle.Render("A calm, focused way to review Git & Mercurial diffs.")
-	status := EmptyStatusStyle.Render(statusMsg)
+	logo := S.EmptyLogoStyle.Render("difi")
+	desc := S.EmptyDescStyle.Render("A calm, focused way to review Git & Mercurial diffs.")
+	status := S.EmptyStatusStyle.Render(statusMsg)
 
-	usageHeader := EmptyHeaderStyle.Render("Usage Patterns")
-	cmd1 := lipgloss.NewStyle().Foreground(ColorText).Render("difi")
-	desc1 := EmptyCodeStyle.Render("Auto-detect VCS, diff against main/tip")
-	cmd2 := lipgloss.NewStyle().Foreground(ColorText).Render("difi --vcs git")
-	desc2 := EmptyCodeStyle.Render("Force Git mode")
-	cmd3 := lipgloss.NewStyle().Foreground(ColorText).Render("difi --vcs hg")
-	desc3 := EmptyCodeStyle.Render("Force Mercurial mode")
+	t := ActiveTheme()
+	usageHeader := S.EmptyHeaderStyle.Render("Usage Patterns")
+	cmd1 := lipgloss.NewStyle().Foreground(t.Fg).Render("difi")
+	desc1 := S.EmptyCodeStyle.Render("Auto-detect VCS, diff against main/tip")
+	cmd2 := lipgloss.NewStyle().Foreground(t.Fg).Render("difi --vcs git")
+	desc2 := S.EmptyCodeStyle.Render("Force Git mode")
+	cmd3 := lipgloss.NewStyle().Foreground(t.Fg).Render("difi --vcs hg")
+	desc3 := S.EmptyCodeStyle.Render("Force Mercurial mode")
 
 	usageBlock := lipgloss.JoinVertical(lipgloss.Left,
 		usageHeader,
@@ -345,11 +372,11 @@ func (m Model) renderEmptyState(w, h int, statusMsg string) string {
 		lipgloss.JoinHorizontal(lipgloss.Left, cmd3, "    ", desc3),
 	)
 
-	navHeader := EmptyHeaderStyle.Render("Navigation")
-	key1 := lipgloss.NewStyle().Foreground(ColorText).Render("Tab")
-	key2 := lipgloss.NewStyle().Foreground(ColorText).Render("j/k")
-	keyDesc1 := EmptyCodeStyle.Render("Switch panels")
-	keyDesc2 := EmptyCodeStyle.Render("Move cursor")
+	navHeader := S.EmptyHeaderStyle.Render("Navigation")
+	key1 := lipgloss.NewStyle().Foreground(t.Fg).Render("Tab")
+	key2 := lipgloss.NewStyle().Foreground(t.Fg).Render("j/k")
+	keyDesc1 := S.EmptyCodeStyle.Render("Switch panels")
+	keyDesc2 := S.EmptyCodeStyle.Render("Move cursor")
 
 	navBlock := lipgloss.JoinVertical(lipgloss.Left,
 		navHeader,
@@ -357,11 +384,11 @@ func (m Model) renderEmptyState(w, h int, statusMsg string) string {
 		lipgloss.JoinHorizontal(lipgloss.Left, key2, "    ", keyDesc2),
 	)
 
-	nvimHeader := EmptyHeaderStyle.Render("Neovim Integration")
-	nvim1 := lipgloss.NewStyle().Foreground(ColorText).Render("xguot/difi.nvim")
-	nvimDesc1 := EmptyCodeStyle.Render("Install plugin")
-	nvim2 := lipgloss.NewStyle().Foreground(ColorText).Render("Press 'e'")
-	nvimDesc2 := EmptyCodeStyle.Render("Edit with context")
+	nvimHeader := S.EmptyHeaderStyle.Render("Neovim Integration")
+	nvim1 := lipgloss.NewStyle().Foreground(t.Fg).Render("xguot/difi.nvim")
+	nvimDesc1 := S.EmptyCodeStyle.Render("Install plugin")
+	nvim2 := lipgloss.NewStyle().Foreground(t.Fg).Render("Press 'e'")
+	nvimDesc2 := S.EmptyCodeStyle.Render("Edit with context")
 
 	nvimBlock := lipgloss.JoinVertical(lipgloss.Left,
 		nvimHeader,
