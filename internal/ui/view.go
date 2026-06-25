@@ -25,7 +25,7 @@ func (m Model) View() string {
 	} else if m.showHelp {
 		bottomBar = m.renderHelpDrawer()
 	} else {
-		bottomBar = m.renderStatusBar()
+		bottomBar = ""
 	}
 
 	contentHeight := m.height - lipgloss.Height(topBar) - lipgloss.Height(bottomBar)
@@ -281,23 +281,6 @@ func (m Model) renderTopBar() string {
 	return S.TopBarStyle.Width(m.width).Render(finalBar)
 }
 
-// renderStatusBar renders the default bottom status line with shortcut hints.
-func (m Model) renderStatusBar() string {
-	t := ActiveTheme()
-	shortcutsStyle := S.StatusKeyStyle.Copy().Background(t.StatusBarBg)
-	shortcuts := shortcutsStyle.Render("? Help  q Quit  Tab Switch  V Visual  f Flat  : Cmd")
-
-	availWidth := m.width - lipgloss.Width(shortcuts)
-	if availWidth < 0 {
-		availWidth = 0
-	}
-
-	paddingStyle := lipgloss.NewStyle().Background(t.StatusBarBg)
-	padding := paddingStyle.Render(strings.Repeat(" ", availWidth))
-
-	return lipgloss.JoinHorizontal(lipgloss.Top, shortcuts, padding)
-}
-
 // renderCmdLine renders a vim-style command-line at the bottom.
 func (m Model) renderCmdLine() string {
 	prompt := S.CmdLinePrompt.Render(":")
@@ -382,18 +365,12 @@ func (m Model) renderHelpDrawer() string {
 func (m Model) renderEmptyState(w, h int, statusMsg string) string {
 	t := ActiveTheme()
 
-	// Vim-style startup screen: centered, minimal, with version and commands
 	logo := S.EmptyLogoStyle.Render("difi")
-	spacer := lipgloss.NewStyle().Height(1).Render("")
+	gap := lipgloss.NewStyle().Height(1).Render("")
 
 	versionLine := S.EmptyDescStyle.Render("version " + m.version)
 	creditLine := S.EmptyStatusStyle.Render("by Xiyuan Guo et al.")
 	ossLine := S.EmptyStatusStyle.Render("difi is open source and freely distributable")
-
-	statusLine := ""
-	if statusMsg != "" {
-		statusLine = S.EmptyStatusStyle.Render(statusMsg)
-	}
 
 	cmdStyle := S.EmptyCodeStyle
 	keyStyle := lipgloss.NewStyle().Foreground(t.Fg)
@@ -403,13 +380,14 @@ func (m Model) renderEmptyState(w, h int, statusMsg string) string {
 	cmdTheme := cmdStyle.Render("type  ") + keyStyle.Render(":colorscheme") + cmdStyle.Render(" to change theme")
 
 	var blocks []string
-	blocks = append(blocks, logo, spacer, versionLine, creditLine, ossLine)
+	blocks = append(blocks, logo, gap, versionLine, creditLine, ossLine)
 
-	if statusLine != "" {
-		blocks = append(blocks, spacer, statusLine)
+	if statusMsg != "" {
+		statusLine := S.EmptyStatusStyle.Render(statusMsg)
+		blocks = append(blocks, gap, statusLine)
 	}
 
-	blocks = append(blocks, spacer, cmdHelp, cmdQuit, cmdTheme)
+	blocks = append(blocks, gap, cmdHelp, cmdQuit, cmdTheme)
 
 	content := lipgloss.JoinVertical(lipgloss.Center, blocks...)
 

@@ -306,7 +306,7 @@ func (m *Model) centerDiffCursor() {
 }
 
 func (m *Model) updateSizes() {
-	reservedHeight := 2
+	reservedHeight := 1 // top bar only; command line replaces bottom when active
 	if m.showHelp {
 		reservedHeight += 12
 	}
