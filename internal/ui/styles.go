@@ -125,16 +125,13 @@ func InitStyles(cfg config.Config) {
 
 		EmptyLogoStyle: lipgloss.NewStyle().
 			Foreground(t.FocusedBorder).
-			Bold(true).
-			MarginBottom(1),
+			Bold(true),
 
 		EmptyDescStyle: lipgloss.NewStyle().
-			Foreground(t.DimFg).
-			MarginBottom(1),
+			Foreground(t.DimFg),
 
 		EmptyStatusStyle: lipgloss.NewStyle().
-			Foreground(t.DimFg).
-			MarginBottom(2),
+			Foreground(t.DimFg),
 
 		EmptyHeaderStyle: lipgloss.NewStyle().
 			Foreground(t.DimFg).

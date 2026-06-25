@@ -383,7 +383,8 @@ func (m Model) renderEmptyState(w, h int, statusMsg string) string {
 	blocks = append(blocks, logo, gap, versionLine, creditLine, ossLine)
 
 	if statusMsg != "" {
-		statusLine := S.EmptyStatusStyle.Render(statusMsg)
+		statusStyle := lipgloss.NewStyle().Foreground(t.Fg).Bold(true)
+		statusLine := statusStyle.Render(statusMsg)
 		blocks = append(blocks, gap, statusLine)
 	}
 
