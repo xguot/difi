@@ -132,9 +132,28 @@ Press `:` to open a vim-style command line at the bottom of the screen. Availabl
 | -------------------------- | ------------------------------------------- |
 | `:colorscheme <name>`      | Switch to a different theme                 |
 | `:theme <name>`            | Alias for `:colorscheme`                    |
+| `:set <option>`            | Change a setting live (e.g. `:set number`)  |
+| `:w`, `:write`             | Refresh the diff view                       |
+| `:help`, `:h`              | Toggle the help drawer                      |
+| `:noh`, `:nohlsearch`      | Clear visual selection highlight            |
+| `:<number>`                | Jump to line N in the diff                  |
+| `:$`                       | Jump to last line in the diff               |
 | `:q`, `:quit`              | Exit (same as pressing `q` in normal mode)  |
 
-Tab cycles through matching commands and theme names. Press `Esc` to cancel.
+Tab cycles through matching commands, theme names, and `:set` options. Press `Esc` to cancel.
+
+### `:set` Options
+
+| Option                  | Effect                          |
+| ----------------------- | ------------------------------- |
+| `number` / `nu`         | Absolute line numbers           |
+| `nonumber` / `nonu`     | Hide line numbers               |
+| `relativenumber` / `rnu`| Relative line numbers           |
+| `norelativenumber`      | Disable relative line numbers   |
+| `hybrid`                | Hybrid (absolute on cursor)     |
+| `relative`              | Relative mode                   |
+| `absolute`              | Absolute mode                   |
+| `hidden`                | No line numbers                 |
 
 ### Available Themes
 
