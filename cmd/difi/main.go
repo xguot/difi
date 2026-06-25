@@ -12,7 +12,7 @@ import (
 	"github.com/xguot/difi/internal/vcs"
 )
 
-var version = "0.2.5"
+var version = "0.2.7"
 
 func main() {
 	showVersion := flag.Bool("version", false, "Show version")
