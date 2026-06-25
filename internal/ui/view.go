@@ -35,15 +35,9 @@ func (m Model) View() string {
 
 	var mainContent string
 
-	// Help buffer takes priority over everything
+	// Help buffer takes priority — full width, no file tree
 	if m.helpMode {
-		treeView := S.PaneStyle.
-			Width(m.fileList.Width()).
-			Height(contentHeight).
-			MaxHeight(contentHeight).
-			Render(m.fileList.View())
-		rightPaneView := m.renderHelpBuffer(contentHeight)
-		mainContent = lipgloss.JoinHorizontal(lipgloss.Top, treeView, rightPaneView)
+		mainContent = m.renderHelpBuffer(m.width, contentHeight)
 	} else if len(m.fileList.Items()) == 0 {
 		mainContent = m.renderEmptyState(m.width, contentHeight, "No changes found against "+m.targetBranch)
 	} else {
@@ -372,9 +366,9 @@ func (m Model) renderHelpDrawer() string {
 		Render(lipgloss.JoinVertical(lipgloss.Left, header, body))
 }
 
-// renderHelpBuffer renders the embedded help.txt in the right pane with
-// basic vimdoc-style highlighting: section dividers, tags, and subsections.
-func (m Model) renderHelpBuffer(contentHeight int) string {
+// renderHelpBuffer renders the embedded help.txt full-width with
+// basic vimdoc-style highlighting: dividers, tags, and subsections.
+func (m Model) renderHelpBuffer(w, contentHeight int) string {
 	if len(m.helpLines) == 0 {
 		return ""
 	}
@@ -387,7 +381,7 @@ func (m Model) renderHelpBuffer(contentHeight int) string {
 		end = len(m.helpLines)
 	}
 
-	maxLineWidth := m.diffViewport.Width - 2
+	maxLineWidth := w - 4
 	if maxLineWidth < 1 {
 		maxLineWidth = 1
 	}
@@ -401,8 +395,8 @@ func (m Model) renderHelpBuffer(contentHeight int) string {
 	for i := start; i < end; i++ {
 		line := m.helpLines[i]
 
-		// Section divider: =======================================
-		if strings.HasPrefix(line, "===") {
+		// Section divider: ──────────────────────────────
+		if strings.HasPrefix(line, "───") || strings.HasPrefix(line, "===") {
 			rendered.WriteString(divStyle.Render(ansi.Truncate(line, maxLineWidth, "")) + "\n")
 			continue
 		}
@@ -439,7 +433,7 @@ func (m Model) renderHelpBuffer(contentHeight int) string {
 	}
 
 	return S.DiffStyle.Copy().
-		Width(m.diffViewport.Width).
+		Width(w).
 		Height(contentHeight).
 		MaxHeight(contentHeight).
 		Render("\n" + strings.TrimRight(rendered.String(), "\n"))

@@ -1,9 +1,5 @@
 *difi.txt*    difi — a calm, focused way to review diffs
 
-==============================================================================
-1. Introduction                                    *difi* *difi-introduction*
-==============================================================================
-
 difi is a terminal UI for reviewing Git and Mercurial diffs before you push.
 It gives you a side-by-side file tree and diff view with syntax highlighting,
 vim keybindings, and a color theme system.
@@ -17,14 +13,11 @@ Run difi in any repository:
 
 difi is open source and freely distributable under the MIT license.
 
-==============================================================================
-2. Navigation                                      *difi-navigation*
-==============================================================================
+────────────────────────────────────────────────────────────────────────────
+Navigation                                              *difi-navigation*
+────────────────────────────────────────────────────────────────────────────
 
-The screen has two panes:
-
-    Left pane             file tree of changed files
-    Right pane            diff view for the selected file
+The screen has two panes: left (file tree) and right (diff view).
 
 > Moving Around
 
@@ -49,9 +42,9 @@ Tab                      toggle focus between tree and diff panes
 h / Left                 focus the left pane (file tree)
 l / Right                focus the right pane (diff)
 
-==============================================================================
-3. File Tree                                       *difi-file-tree*
-==============================================================================
+────────────────────────────────────────────────────────────────────────────
+File Tree                                               *difi-file-tree*
+────────────────────────────────────────────────────────────────────────────
 
 The left pane shows all changed files in a collapsible tree.
 
@@ -60,11 +53,9 @@ Enter                    on a file — same as pressing e (edit)
 f                        toggle flat mode (show full paths, no tree)
 j / k                    move selection up or down
 
-In flat mode all files are shown as a single flat list with full paths.
-
-==============================================================================
-4. Editing                                         *difi-editing*
-==============================================================================
+────────────────────────────────────────────────────────────────────────────
+Editing                                                 *difi-editing*
+────────────────────────────────────────────────────────────────────────────
 
 e / Enter                open the selected file in your editor
 
@@ -80,9 +71,9 @@ Set a custom editor in ~/.config/difi/config.yaml:
 
     editor: "nvim"
 
-==============================================================================
-5. Visual Mode                                     *difi-visual-mode*
-==============================================================================
+────────────────────────────────────────────────────────────────────────────
+Visual Mode                                             *difi-visual-mode*
+────────────────────────────────────────────────────────────────────────────
 
 Visual mode lets you select a range of lines in the diff.
 
@@ -92,9 +83,9 @@ Esc                      exit visual mode
 
 The selected range is highlighted with the cursor line background color.
 
-==============================================================================
-6. The Command Line                                *difi-command-line*
-==============================================================================
+────────────────────────────────────────────────────────────────────────────
+Command Line                                            *difi-command-line*
+────────────────────────────────────────────────────────────────────────────
 
 Press : to open a vim-style command line at the bottom of the screen.
 
@@ -126,9 +117,9 @@ Press : to open a vim-style command line at the bottom of the screen.
 Press Tab to cycle through matching command names, theme names, and :set
 option values. Press Esc to cancel the command line.
 
-==============================================================================
-7. Color Themes                                    *difi-themes*
-==============================================================================
+────────────────────────────────────────────────────────────────────────────
+Color Themes                                            *difi-themes*
+────────────────────────────────────────────────────────────────────────────
 
 difi ships with 17 built-in themes ported from popular vim colorschemes.
 Set the default theme in ~/.config/difi/config.yaml:
@@ -136,14 +127,10 @@ Set the default theme in ~/.config/difi/config.yaml:
     ui:
       theme: "nord"
 
-Or switch live with:
-
-    :colorscheme <name>
+Or switch live with :colorscheme <name>.
 
 > Available Themes
 
-Name                  Dark / Light
-──────────────────────────────────
 nord                  dark (default)
 gruvbox               dark
 catppuccin-mocha      dark
@@ -162,13 +149,13 @@ evergarden            dark
 doom-one              dark
 quiet                 dark
 
-==============================================================================
-8. Configuration                                   *difi-config*
-==============================================================================
+────────────────────────────────────────────────────────────────────────────
+Configuration                                           *difi-config*
+────────────────────────────────────────────────────────────────────────────
 
 difi reads its configuration from ~/.config/difi/config.yaml.
 
-> All Options
+> Options
 
 editor                 editor command (or env vars DIFI_EDITOR, EDITOR, VISUAL)
 ui.theme               colorscheme name (see |difi-themes|)
@@ -183,9 +170,9 @@ ui.diff_del_bg         hex color override for deleted line backgrounds
       line_numbers: "hybrid"
       theme: "nord"
 
-==============================================================================
-9. Key Bindings Quick Reference                    *difi-keyref*
-==============================================================================
+────────────────────────────────────────────────────────────────────────────
+Key Bindings                                            *difi-keyref*
+────────────────────────────────────────────────────────────────────────────
 
 > Normal Mode
 
@@ -215,15 +202,12 @@ q / ZZ          quit
 :<number>       jump to line
 :$              jump to last line
 
-==============================================================================
-10. About                                          *difi-about*
-==============================================================================
+────────────────────────────────────────────────────────────────────────────
+About                                                   *difi-about*
+────────────────────────────────────────────────────────────────────────────
 
 difi version <VERSION>
 by Xiyuan Guo et al.
 
 Homepage:  https://github.com/xguot/difi
 Website:   https://difi.vercel.app
-
-==============================================================================
- vim:tw=78:ts=8:ft=help:norl:
