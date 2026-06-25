@@ -23,7 +23,7 @@ func Load() Config {
 	cfg := Config{
 		UI: UIConfig{
 			LineNumbers: "hybrid",
-			Theme:       "default",
+			Theme:       "nord",
 		},
 	}
 

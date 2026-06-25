@@ -38,14 +38,15 @@ func (d TreeDelegate) Render(w io.Writer, m list.Model, index int, item list.Ite
 	title = ansi.Truncate(title, maxWidth, "…")
 
 	if index == m.Index() {
+		t := ActiveTheme()
 		style := lipgloss.NewStyle().
-			Background(lipgloss.Color("237")).
-			Foreground(lipgloss.Color("255")).
+			Background(t.SelectedItemBg).
+			Foreground(t.SelectedItemFg).
 			Bold(true).
 			Width(maxWidth)
 
 		if !d.Focused {
-			style = style.Foreground(lipgloss.Color("245"))
+			style = style.Foreground(t.DimFg)
 		}
 
 		fmt.Fprint(w, style.Render(title))
