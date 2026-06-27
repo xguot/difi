@@ -29,6 +29,10 @@ archives:
     format_overrides:
       - goos: windows
         formats: [zip]
+    files:
+      - src: "man/man1/difi.1"
+        dst: "share/man/man1/"
+        strip_parent: true
 
 checksum:
   name_template: "checksums.txt"
