@@ -72,6 +72,24 @@ Set a custom editor in ~/.config/difi/config.yaml:
     editor: "nvim"
 
 ────────────────────────────────────────────────────────────────────────────
+Diff Layout                                             *difi-diff-layout*
+────────────────────────────────────────────────────────────────────────────
+
+difi supports two diff layouts:
+
+unified (default)        single column with + / - prefixes
+split                    GitHub-style side-by-side (old left, new right)
+
+s                        toggle split / unified (works from either pane)
+:set split               switch to split layout
+:set unified             switch to unified layout
+
+Set the default in ~/.config/difi/config.yaml:
+
+    ui:
+      diff_mode: "split"
+
+────────────────────────────────────────────────────────────────────────────
 Visual Mode                                             *difi-visual-mode*
 ────────────────────────────────────────────────────────────────────────────
 
@@ -113,6 +131,8 @@ Press : to open a vim-style command line at the bottom of the screen.
 :set relative             relative mode
 :set absolute             absolute mode
 :set hidden               no line numbers
+:set split                side-by-side diff (GitHub-style)
+:set unified              unified diff (default)
 
 Press Tab to cycle through matching command names, theme names, and :set
 option values. Press Esc to cancel the command line.
@@ -160,6 +180,7 @@ difi reads its configuration from ~/.config/difi/config.yaml.
 editor                 editor command (or env vars DIFI_EDITOR, EDITOR, VISUAL)
 ui.theme               colorscheme name (see |difi-themes|)
 ui.line_numbers        line number style (hybrid, relative, absolute, hidden)
+ui.diff_mode           diff layout (unified, split)
 ui.diff_add_bg         hex color override for added line backgrounds
 ui.diff_del_bg         hex color override for deleted line backgrounds
 

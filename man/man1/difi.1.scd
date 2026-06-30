@@ -89,6 +89,8 @@ left or right pane directly.
 :  Center cursor / top / bottom scroll
 |  _e_, _Enter_
 :  Edit file at the cursor line
+|  _s_
+:  Toggle split / unified diff view
 |  _V_
 :  Toggle visual selection mode
 |  _f_
@@ -181,6 +183,10 @@ values. Press _Esc_ to cancel.
 :  Absolute mode
 |  _hidden_
 :  No line numbers
+|  _split_
+:  Side-by-side diff layout
+|  _unified_
+:  Unified diff layout (default)
 
 # EDITING
 
@@ -212,6 +218,9 @@ file does not exist, sensible defaults are used.
 |  _ui.line_numbers_
 :  _hybrid_
 :  Line number style (_hybrid_, _relative_, _absolute_, _hidden_)
+|  _ui.diff_mode_
+:  _unified_
+:  Diff layout (_unified_ or _split_)
 |  _ui.diff_add_bg_
 :  _""_
 :  Hex color for added line backgrounds

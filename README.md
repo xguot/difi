@@ -94,6 +94,7 @@ git diff | difi
 | `j / k`       | Move cursor down / up                        |
 | `h / l`       | Focus Left (Tree) / Focus Right (Diff)       |
 | `e` / `Enter` | Edit file (opens editor at selected line)    |
+| `s`           | Toggle split / unified diff view             |
 | `:`           | Open vim-style command line                  |
 | `?`           | Toggle help drawer                           |
 | `q` / `ZZ`    | Quit                                         |
@@ -121,6 +122,7 @@ ui:
 | `editor`          | `$DIFI_EDITOR`, `$EDITOR`, `$VISUAL`, or `vi` | The editor to open when pressing `e` on a file.          |
 | `ui.line_numbers` | `"hybrid"`                                    | The style of line numbers in the diff view.              |
 | `ui.theme`        | `"nord"`                                      | The vim colorscheme used for syntax highlighting and UI. |
+| `ui.diff_mode`    | `"unified"`                                   | Diff layout: `"unified"` or `"split"` (side-by-side).    |
 | `ui.diff_add_bg`  | `""`                                          | Hex code or terminal color for added line backgrounds.   |
 | `ui.diff_del_bg`  | `""`                                          | Hex code or terminal color for deleted line backgrounds. |
 

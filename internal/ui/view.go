@@ -57,6 +57,12 @@ func (m Model) View() string {
 
 		if ok && selectedItem.IsDir {
 			rightPaneView = m.renderEmptyState(m.diffViewport.Width, contentHeight, "Directory: "+selectedItem.Name)
+		} else if m.splitMode() {
+			rightPaneView = S.DiffStyle.Copy().
+				Width(m.diffViewport.Width).
+				Height(contentHeight).
+				MaxHeight(contentHeight).
+				Render(m.renderSplitDiff(contentHeight))
 		} else {
 			var renderedDiff strings.Builder
 
@@ -127,8 +133,9 @@ func (m Model) View() string {
 				}
 
 				if mode != "hidden" {
+					rawIdx := m.cursorRawIdx()
 					if isCursor && mode == "hybrid" {
-						realLine := m.vcs.CalculateFileLine(m.diffLines, m.diffCursor)
+						realLine := m.vcs.CalculateFileLine(m.diffLines, rawIdx)
 						numStr = fmt.Sprintf("%d", realLine)
 					} else if isCursor && mode == "relative" {
 						numStr = "0"
@@ -206,7 +213,7 @@ func (m Model) View() string {
 				Height(contentHeight).
 				MaxHeight(contentHeight).
 				Render(diffContentStr)
-			}
+		}
 
 		mainContent = lipgloss.JoinHorizontal(lipgloss.Top, treeView, rightPaneView)
 	}
@@ -226,6 +233,9 @@ func (m Model) renderTopBar() string {
 	}
 
 	info := fmt.Sprintf(" %s:%s  %s ➜ %s%s", m.repoName, vcsType, m.currentBranch, m.targetBranch, repoStats)
+	if m.splitMode() {
+		info += "  split"
+	}
 	leftSide := S.TopInfoStyle.Render(info)
 
 	rightSide := ""
@@ -331,6 +341,7 @@ func (m Model) renderHelpDrawer() string {
 
 	edit := lipgloss.JoinVertical(lipgloss.Left,
 		S.HelpTextStyle.Render("e / Enter    Edit file at cursor"),
+		S.HelpTextStyle.Render("s            Toggle split / unified diff (any pane)"),
 		S.HelpTextStyle.Render("V            Visual selection mode"),
 		S.HelpTextStyle.Render("f            Toggle flat tree mode"),
 		S.HelpTextStyle.Render("esc          Cancel visual mode"),
@@ -338,7 +349,7 @@ func (m Model) renderHelpDrawer() string {
 
 	cmds := lipgloss.JoinVertical(lipgloss.Left,
 		S.HelpTextStyle.Render(":colorscheme Switch theme"),
-		S.HelpTextStyle.Render(":set <opt>   Change setting"),
+		S.HelpTextStyle.Render(":set <opt>   Change setting (split/unified)"),
 		S.HelpTextStyle.Render(":w           Refresh diff"),
 		S.HelpTextStyle.Render(":noh         Clear highlight"),
 		S.HelpTextStyle.Render(":<num>  :$   Jump to line"),

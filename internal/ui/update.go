@@ -241,6 +241,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.updateTreeFocus()
 			m.inputBuffer = ""
 
+		case "s":
+			if item, ok := m.fileList.SelectedItem().(tree.TreeItem); ok && !item.IsDir {
+				m.toggleSplitMode()
+				m.handleScrolling()
+			}
+			m.inputBuffer = ""
+
 		case "f":
 			if m.focus == FocusTree {
 				m.flatMode = !m.flatMode
@@ -271,7 +278,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				line := 0
 				if m.focus == FocusDiff {
-					line = m.vcs.CalculateFileLine(m.diffLines, m.diffCursor)
+					line = m.vcs.CalculateFileLine(m.diffLines, m.cursorRawIdx())
 				} else {
 					line = m.vcs.CalculateFileLine(m.diffLines, 0)
 				}
@@ -360,7 +367,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					target := count - 1
 					m.diffCursor = m.snapCursor(target, 1)
 				} else {
-					m.diffCursor = m.snapCursor(len(m.diffLines)-1, -1)
+					m.diffCursor = m.snapCursor(m.diffLineCount()-1, -1)
 				}
 				m.setYOffset(m.diffCursor - m.diffViewport.Height + 1)
 				m.inputBuffer = ""
@@ -470,6 +477,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.diffHighlighted = hlLines
 		m.currentFileAdded = added
 		m.currentFileDeleted = deleted
+		m.rebuildSplitRows()
 		m.diffCursor = m.snapCursor(0, 1)
 
 	case vcs.EditorFinishedMsg:
@@ -561,7 +569,7 @@ func (m *Model) executeCommand() (bool, tea.Cmd) {
 
 	// :$ — jump to last diff line
 	if cmd == "$" {
-		m.diffCursor = m.snapCursor(len(m.diffLines)-1, -1)
+		m.diffCursor = m.snapCursor(m.diffLineCount()-1, -1)
 		m.centerDiffCursor()
 		return false, nil
 	}
@@ -595,6 +603,12 @@ func (m *Model) executeSet(opt string) {
 		m.treeDelegate.Config.UI.LineNumbers = "absolute"
 	case "hidden":
 		m.treeDelegate.Config.UI.LineNumbers = "hidden"
+	case "split":
+		m.treeDelegate.Config.UI.DiffMode = "split"
+		m.applyDiffModeChange(true)
+	case "unified":
+		m.treeDelegate.Config.UI.DiffMode = "unified"
+		m.applyDiffModeChange(false)
 	}
 }
 
@@ -606,6 +620,7 @@ var setOptionNames = []string{
 	"number", "nonumber", "nu", "nonu",
 	"relativenumber", "norelativenumber", "rnu", "nornu",
 	"hybrid", "relative", "absolute", "hidden",
+	"split", "unified",
 }
 
 // tabComplete handles vim-style tab cycling through matching completions.

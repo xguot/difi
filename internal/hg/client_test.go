@@ -68,7 +68,7 @@ func TestCalculateFileLine(t *testing.T) {
 		{
 			name:            "hunk header",
 			visualLineIndex: 3,
-			expectedLineNo:  9,
+			expectedLineNo:  10,
 		},
 		{
 			name:            "context line",
@@ -78,7 +78,7 @@ func TestCalculateFileLine(t *testing.T) {
 		{
 			name:            "deleted line",
 			visualLineIndex: 5,
-			expectedLineNo:  10,
+			expectedLineNo:  11,
 		},
 		{
 			name:            "added line 1",
@@ -92,9 +92,11 @@ func TestCalculateFileLine(t *testing.T) {
 		},
 	}
 
+	diffLines := strings.Split(diffContent, "\n")
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := CalculateFileLine(diffContent, tt.visualLineIndex)
+			result := CalculateFileLine(diffLines, tt.visualLineIndex)
 			if result != tt.expectedLineNo {
 				t.Errorf("CalculateFileLine(%d) = %d, want %d", tt.visualLineIndex, result, tt.expectedLineNo)
 			}

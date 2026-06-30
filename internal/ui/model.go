@@ -11,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/xguot/difi/internal/config"
+	"github.com/xguot/difi/internal/diffsplit"
 	"github.com/xguot/difi/internal/tree"
 	"github.com/xguot/difi/internal/vcs"
 )
@@ -26,7 +27,7 @@ const (
 )
 
 var ansiRe = regexp.MustCompile("[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[a-zA-Z\\d]*)*)?\u0007)|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PRZcf-ntqry=><~]))")
-var bgAnsiRe = regexp.MustCompile(`\x1b\[48;2;\d+;\d+;\d+m|\x1b\[4[0-9]m`)
+var bgAnsiRe = regexp.MustCompile(`\x1b\[48;2;\d+;\d+;\d+m|\x1b\[48;5;\d+m|\x1b\[4[0-9]m`)
 
 type StatsMsg struct {
 	Added   int
@@ -56,6 +57,7 @@ type Model struct {
 	diffContent     string
 	diffLines       []string
 	diffHighlighted []string
+	splitRows       []diffsplit.Row
 	diffCursor      int
 	visualMode      bool
 	visualStart     int
@@ -252,8 +254,61 @@ func isDiffContentLine(cleanLine string) bool {
 		strings.HasPrefix(cleanLine, "-")
 }
 
+func (m *Model) splitMode() bool {
+	mode := strings.ToLower(strings.TrimSpace(m.treeDelegate.Config.UI.DiffMode))
+	return mode == "split"
+}
+
+func (m *Model) toggleSplitMode() {
+	if m.splitMode() {
+		m.treeDelegate.Config.UI.DiffMode = "unified"
+	} else {
+		m.treeDelegate.Config.UI.DiffMode = "split"
+	}
+	// Preserve current focus: toggling layout from the tree keeps you in the tree.
+	m.applyDiffModeChange(false)
+}
+
+// applyDiffModeChange rebuilds split state after a diff-mode switch. Because the
+// cursor index means different things in unified vs split layouts, the cursor
+// and any active visual selection are reset to a known-good state. Focus only
+// moves to the diff pane when entering split layout.
+func (m *Model) applyDiffModeChange(focusDiff bool) {
+	m.visualMode = false
+	m.visualStart = 0
+	m.rebuildSplitRows()
+	m.diffCursor = m.snapCursor(0, 1)
+	m.setYOffset(0)
+	if focusDiff {
+		m.focus = FocusDiff
+	}
+	m.updateTreeFocus()
+}
+
+func (m *Model) rebuildSplitRows() {
+	if m.splitMode() {
+		m.splitRows = diffsplit.Build(m.diffLines, m.diffHighlighted)
+	} else {
+		m.splitRows = nil
+	}
+}
+
+func (m *Model) diffLineCount() int {
+	if m.splitMode() {
+		return len(m.splitRows)
+	}
+	return len(m.diffLines)
+}
+
+func (m *Model) cursorRawIdx() int {
+	if m.splitMode() && m.diffCursor >= 0 && m.diffCursor < len(m.splitRows) {
+		return m.splitRows[m.diffCursor].PrimaryRawIdx()
+	}
+	return m.diffCursor
+}
+
 func (m *Model) setYOffset(offset int) {
-	maxOffset := len(m.diffLines) - m.diffViewport.Height
+	maxOffset := m.diffLineCount() - m.diffViewport.Height
 	if maxOffset < 0 {
 		maxOffset = 0
 	}
@@ -269,6 +324,19 @@ func (m *Model) setYOffset(offset int) {
 }
 
 func (m *Model) snapCursor(idx int, dir int) int {
+	if m.splitMode() {
+		if len(m.splitRows) == 0 {
+			return 0
+		}
+		if idx < 0 {
+			idx = 0
+		}
+		if idx >= len(m.splitRows) {
+			idx = len(m.splitRows) - 1
+		}
+		return idx
+	}
+
 	if len(m.diffLines) == 0 {
 		return 0
 	}

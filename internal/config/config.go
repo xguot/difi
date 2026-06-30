@@ -15,6 +15,7 @@ type Config struct {
 type UIConfig struct {
 	LineNumbers string `yaml:"line_numbers"`
 	Theme       string `yaml:"theme"`
+	DiffMode    string `yaml:"diff_mode"`
 	DiffAddBg   string `yaml:"diff_add_bg"`
 	DiffDelBg   string `yaml:"diff_del_bg"`
 }
@@ -24,6 +25,7 @@ func Load() Config {
 		UI: UIConfig{
 			LineNumbers: "hybrid",
 			Theme:       "nord",
+			DiffMode:    "unified",
 		},
 	}
 
@@ -45,6 +47,10 @@ func Load() Config {
 	}
 	if cfg.Editor == "" {
 		cfg.Editor = "vi"
+	}
+
+	if cfg.UI.DiffMode == "" {
+		cfg.UI.DiffMode = "unified"
 	}
 
 	return cfg

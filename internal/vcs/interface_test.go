@@ -106,12 +106,12 @@ func TestVCSInterfaceConsistency(t *testing.T) {
 			})
 
 			t.Run("CalculateFileLine", func(t *testing.T) {
-				line := vcs.CalculateFileLine("", 0)
+				line := vcs.CalculateFileLine(nil, 0)
 				if line != 1 && line != 0 {
-					t.Errorf("%s CalculateFileLine('', 0) should return 1 or 0, got %d", impl.name, line)
+					t.Errorf("%s CalculateFileLine(nil, 0) should return 1 or 0, got %d", impl.name, line)
 				}
 
-				line = vcs.CalculateFileLine("single line", 10)
+				line = vcs.CalculateFileLine([]string{"single line"}, 10)
 				if line < 0 {
 					t.Errorf("%s CalculateFileLine with out-of-bounds index should not return negative, got %d", impl.name, line)
 				}
