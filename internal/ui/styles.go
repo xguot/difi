@@ -49,6 +49,9 @@ var S *Styles
 
 // InitStyles builds all UI styles from the selected theme and user config overrides.
 func InitStyles(cfg config.Config) {
+	copyCfg := cfg
+	lastCfg = &copyCfg
+
 	t := GetTheme(cfg.UI.Theme)
 	if t == nil {
 		t = nord
@@ -222,7 +225,5 @@ func lastConfig() (config.Config, bool) {
 
 // ReinitStyles rebuilds styles from a new config (used after :colorscheme).
 func ReinitStyles(cfg config.Config) {
-	copyCfg := cfg
-	lastCfg = &copyCfg
 	InitStyles(cfg)
 }
