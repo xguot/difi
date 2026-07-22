@@ -1,0 +1,37 @@
+name: version-guard
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  version-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify version string is "dev"
+        run: |
+          VERSION_LINE=$(grep 'var version = ' cmd/difi/main.go)
+          if ! echo "$VERSION_LINE" | grep -q '"dev"'; then
+            echo "ERROR: cmd/difi/main.go contains a hardcoded version: $VERSION_LINE"
+            echo ""
+            echo "The version string must be 'dev'."
+            echo "Versions are injected at build time from git tags via ldflags."
+            echo "Remove the hardcoded version number and use 'dev' instead."
+            exit 1
+          fi
+          echo "OK: version string is 'dev'"
+
+      - name: Verify Makefile injects version
+        run: |
+          if ! grep -q 'X main.version' Makefile; then
+            echo "ERROR: Makefile does not inject version via ldflags"
+            echo "The build target must include: -X main.version=\$(VERSION)"
+            exit 1
+          fi
+          echo "OK: Makefile injects version at build time"

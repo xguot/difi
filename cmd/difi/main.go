@@ -12,7 +12,10 @@ import (
 	"github.com/xguot/difi/internal/vcs"
 )
 
-var version = "0.2.9"
+// version is set at build time via ldflags.
+// Release binaries inject the git tag via -X main.version.
+// Local builds report "dev" unless overridden.
+var version = "dev"
 
 func main() {
 	showVersion := flag.Bool("version", false, "Show version")

@@ -9,7 +9,44 @@ permissions:
   contents: write
 
 jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify source version is "dev"
+        run: |
+          VERSION_LINE=$(grep 'var version = ' cmd/difi/main.go)
+          if ! echo "$VERSION_LINE" | grep -q '"dev"'; then
+            echo "ERROR: cmd/difi/main.go contains a hardcoded version: $VERSION_LINE"
+            echo "The version string must be 'dev'. Versions are injected at build time from git tags."
+            exit 1
+          fi
+          echo "OK: version string is 'dev'"
+
+      - name: Validate tag is semver
+        run: |
+          TAG="${{ github.ref_name }}"
+          if ! echo "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "ERROR: tag '$TAG' does not match semver pattern vX.Y.Z"
+            exit 1
+          fi
+          echo "OK: tag '$TAG' is valid semver"
+
+      - name: Check tag has not been released before
+        run: |
+          TAG="${{ github.ref_name }}"
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG")
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "ERROR: release for tag '$TAG' already exists. Tags must not be re-used or force-pushed."
+            exit 1
+          fi
+          echo "OK: tag '$TAG' has not been released before"
+
   goreleaser:
+    needs: guard
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -30,4 +67,4 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
