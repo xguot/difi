@@ -28,7 +28,7 @@ jobs:
       - name: Validate tag is semver
         run: |
           TAG="${{ github.ref_name }}"
-          if ! echo "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+          if ! echo "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+'; then
             echo "ERROR: tag '$TAG' does not match semver pattern vX.Y.Z"
             exit 1
           fi
