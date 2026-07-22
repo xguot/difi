@@ -47,13 +47,4 @@ changelog:
       - "^docs:"
       - "^test:"
 
-brews:
-  - name: difi
-    repository:
-      owner: xguot
-      name: homebrew-difi
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    directory: Formula
-    homepage: "https://github.com/xguot/difi"
-    description: "The pixel-perfect terminal diff viewer"
-    license: "MIT"
+
