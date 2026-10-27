@@ -22,7 +22,7 @@ func (m *Model) refreshSession() tea.Cmd {
 		var files []string
 		var err error
 		var stats StatsMsg
-		if snapshot.pipedDiff != "" {
+		if snapshot.fromStdin {
 			files = snapshot.vcs.ParseFilesFromDiff(snapshot.pipedDiff)
 			stats = snapshot.computePipedStatsCmd()().(StatsMsg)
 		} else {
@@ -60,28 +60,5 @@ func (m *Model) replaceFiles(files []string) {
 	}
 	preserve(next.Root)
 	m.treeState = next
-	items := next.Items(m.flatMode)
-	m.fileList.SetItems(items)
-	m.selectedPath = ""
-	first := -1
-	for i, item := range items {
-		if ti, ok := item.(tree.TreeItem); ok && !ti.IsDir {
-			if first < 0 {
-				first = i
-			}
-			if ti.FullPath == previous {
-				first = i
-				break
-			}
-		}
-	}
-	if first >= 0 {
-		m.fileList.Select(first)
-		m.selectedPath = items[first].(tree.TreeItem).FullPath
-	}
-	if m.selectedPath != previous {
-		m.diffCursor = 0
-		m.visualMode = false
-		m.diffViewport.GotoTop()
-	}
+	m.rebuildFileList(previous)
 }

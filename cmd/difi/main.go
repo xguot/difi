@@ -1,13 +1,16 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/xguot/difi/internal/config"
+	"github.com/xguot/difi/internal/review"
 	"github.com/xguot/difi/internal/ui"
 	"github.com/xguot/difi/internal/vcs"
 )
@@ -17,93 +20,174 @@ import (
 // Local builds report "dev" unless overridden.
 var version = "dev"
 
-func main() {
-	showVersion := flag.Bool("version", false, "Show version")
-	flag.BoolVar(showVersion, "v", false, "Show version (shorthand)")
+type cliOptions struct {
+	showVersion, plain, flat      bool
+	staged, unstaged, noUntracked bool
+	forceVCS, target              string
+	targetProvided                bool
+}
 
-	plain := flag.Bool("plain", false, "Print a plain summary")
-	flag.BoolVar(plain, "p", false, "Print a plain summary (shorthand)")
-
-	flat := flag.Bool("flat", false, "Use one-line file navigation")
-	flag.BoolVar(flat, "f", false, "Use one-line file navigation (shorthand)")
-
-	forceVCS := flag.String("vcs", "", "Force specific VCS (git or hg)")
-
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage of %s [options] [target]\n\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "Options:\n")
-		fmt.Fprintf(os.Stderr, "  -v, --version  Show version\n")
-		fmt.Fprintf(os.Stderr, "  -p, --plain    Print a plain summary\n")
-		fmt.Fprintf(os.Stderr, "  -f, --flat     Use one-line file navigation\n")
-		fmt.Fprintf(os.Stderr, "  --vcs string   Force specific VCS (git or hg)\n")
-		fmt.Fprintf(os.Stderr, "\nTarget:\n")
-		fmt.Fprintf(os.Stderr, "  branch, commit, or tag to compare against (default: HEAD or tip)\n")
+func parseArgs(args []string, output io.Writer) (cliOptions, error) {
+	var options cliOptions
+	flags := flag.NewFlagSet("difi", flag.ContinueOnError)
+	flags.SetOutput(output)
+	flags.BoolVar(&options.showVersion, "version", false, "Show version")
+	flags.BoolVar(&options.showVersion, "v", false, "Show version (shorthand)")
+	flags.BoolVar(&options.plain, "plain", false, "Print a plain list of changed files")
+	flags.BoolVar(&options.plain, "p", false, "Print a plain list (shorthand)")
+	flags.BoolVar(&options.flat, "flat", false, "Use one-line file navigation")
+	flags.BoolVar(&options.flat, "f", false, "Use one-line file navigation (shorthand)")
+	flags.BoolVar(&options.staged, "staged", false, "Review the Git index against HEAD or target")
+	flags.BoolVar(&options.staged, "s", false, "Review staged changes (shorthand)")
+	flags.BoolVar(&options.unstaged, "unstaged", false, "Review the Git working tree against the index")
+	flags.BoolVar(&options.unstaged, "u", false, "Review unstaged changes (shorthand)")
+	flags.BoolVar(&options.noUntracked, "no-untracked", false, "Exclude untracked files")
+	flags.StringVar(&options.forceVCS, "vcs", "", "Force VCS backend (git or hg)")
+	flags.Usage = func() {
+		fmt.Fprintln(output, "Usage: difi [options] [target]")
+		fmt.Fprintln(output, "       difi [--plain] < changes.patch")
+		fmt.Fprintln(output, "\nOptions:")
+		fmt.Fprintln(output, "  -v, --version       Show version")
+		fmt.Fprintln(output, "  -p, --plain         Print changed file paths and exit")
+		fmt.Fprintln(output, "  -f, --flat          Use flat file navigation")
+		fmt.Fprintln(output, "  -s, --staged        Review index vs HEAD or target (Git)")
+		fmt.Fprintln(output, "  -u, --unstaged      Review working tree vs index (Git)")
+		fmt.Fprintln(output, "      --no-untracked Exclude untracked files")
+		fmt.Fprintln(output, "      --vcs git|hg   Force a VCS backend")
+		fmt.Fprintln(output, "\nTarget defaults to HEAD (tip for Mercurial). --unstaged takes no target.")
 	}
-
-	flag.Parse()
-
-	if *showVersion {
-		fmt.Printf("difi version %s\n", version)
-		os.Exit(0)
+	if err := flags.Parse(args); err != nil {
+		return options, err
 	}
-
-	var pipedDiff string
-	if stat, _ := os.Stdin.Stat(); (stat.Mode() & os.ModeCharDevice) == 0 {
-		b, _ := io.ReadAll(os.Stdin)
-		pipedDiff = string(b)
+	if flags.NArg() > 1 {
+		return options, errors.New("expected at most one target")
 	}
-
-	// Detect or force VCS type
-	var vcsClient vcs.VCS
-	if *forceVCS != "" {
-		switch *forceVCS {
-		case "git":
-			vcsClient = vcs.GitVCS{}
-		case "hg":
-			vcsClient = vcs.HgVCS{}
-		default:
-			fmt.Fprintf(os.Stderr, "Error: unsupported VCS '%s'. Supported values: git, hg\n", *forceVCS)
-			os.Exit(1)
+	if flags.NArg() == 1 {
+		options.target, options.targetProvided = flags.Arg(0), true
+		if strings.HasPrefix(options.target, "-") {
+			return options, errors.New("target must be a branch, commit, or tag, not an option")
 		}
-	} else {
-		vcsClient = vcs.DetectVCS()
+	}
+	return options, nil
+}
+
+func (o cliOptions) validate(piped, mercurial bool) error {
+	if o.staged && o.unstaged {
+		return errors.New("--staged and --unstaged cannot be combined")
+	}
+	if o.unstaged && o.targetProvided {
+		return errors.New("--unstaged compares against the index and does not accept a target")
+	}
+	if mercurial && (o.staged || o.unstaged) {
+		return errors.New("--staged and --unstaged require Git; Mercurial has no index")
+	}
+	if piped && (o.staged || o.unstaged || o.noUntracked || o.targetProvided) {
+		return errors.New("piped patches already define their comparison; do not combine stdin with a target or review scope flags")
+	}
+	return nil
+}
+
+func main() { os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr)) }
+
+func run(args []string, stdin *os.File, stdout, stderr io.Writer) int {
+	options, err := parseArgs(args, stderr)
+	if errors.Is(err, flag.ErrHelp) {
+		return 0
+	}
+	if err != nil {
+		fmt.Fprintln(stderr, "Error:", err)
+		return 2
+	}
+	if options.showVersion {
+		fmt.Fprintf(stdout, "difi version %s\n", version)
+		return 0
 	}
 
-	target := "HEAD"
-	if flag.NArg() > 0 {
-		target = flag.Arg(0)
+	var client vcs.VCS
+	switch options.forceVCS {
+	case "":
+		client = vcs.DetectVCS()
+	case "git":
+		client = vcs.GitVCS{}
+	case "hg":
+		client = vcs.HgVCS{}
+	default:
+		fmt.Fprintln(stderr, "Error: --vcs must be git or hg")
+		return 2
 	}
-
-	// For Mercurial, use "tip" as default instead of "HEAD"
-	if _, isHg := vcsClient.(vcs.HgVCS); isHg && target == "HEAD" {
-		target = "tip"
+	stat, err := stdin.Stat()
+	if err != nil {
+		fmt.Fprintln(stderr, "Error reading stdin:", err)
+		return 1
 	}
-
-	if *plain && pipedDiff == "" {
-		// Use VCS-specific commands for plain output
-		files, err := vcsClient.ListChangedFiles(target)
+	piped := stat.Mode()&os.ModeCharDevice == 0
+	_, mercurial := client.(vcs.HgVCS)
+	if err := options.validate(piped, mercurial); err != nil {
+		fmt.Fprintln(stderr, "Error:", err)
+		return 2
+	}
+	var input string
+	if piped {
+		data, err := io.ReadAll(stdin)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error listing changed files: %v\n", err)
-			os.Exit(1)
+			fmt.Fprintln(stderr, "Error reading stdin:", err)
+			return 1
+		}
+		input = string(data)
+	}
+
+	reviewOptions := review.Options{NoUntracked: options.noUntracked}
+	if options.staged {
+		reviewOptions.Scope = review.Staged
+	}
+	if options.unstaged {
+		reviewOptions.Scope = review.Unstaged
+	}
+	switch c := client.(type) {
+	case vcs.GitVCS:
+		c.Options = reviewOptions
+		client = c
+	case vcs.HgVCS:
+		c.Options = reviewOptions
+		client = c
+	}
+	target := options.target
+	if !options.targetProvided {
+		target = "HEAD"
+		if mercurial {
+			target = "tip"
+		}
+	}
+	if options.plain {
+		var files []string
+		if piped {
+			files = client.ParseFilesFromDiff(input)
+		} else {
+			files, err = client.ListChangedFiles(target)
+		}
+		if err != nil {
+			fmt.Fprintln(stderr, "Error listing changed files:", err)
+			return 1
 		}
 		for _, file := range files {
-			fmt.Println(file)
+			fmt.Fprintln(stdout, file)
 		}
-		os.Exit(0)
+		return 0
 	}
 
 	cfg := config.Load()
-
-	opts := []tea.ProgramOption{tea.WithAltScreen()}
-	if pipedDiff != "" {
-		if tty, err := os.Open("/dev/tty"); err == nil {
-			opts = append(opts, tea.WithInput(tty))
+	programOptions := []tea.ProgramOption{tea.WithAltScreen(), tea.WithInput(stdin), tea.WithOutput(stdout)}
+	if piped {
+		tty, err := os.Open("/dev/tty")
+		if err == nil {
+			defer tty.Close()
+			programOptions = append(programOptions, tea.WithInput(tty))
 		}
 	}
-
-	p := tea.NewProgram(ui.NewModel(cfg, target, pipedDiff, vcsClient, *flat, version), opts...)
-	if _, err := p.Run(); err != nil {
-		fmt.Printf("Error: %v\n", err)
-		os.Exit(1)
+	model := ui.NewModel(cfg, target, input, client, options.flat, version, ui.Options{Review: reviewOptions, FromStdin: piped})
+	if _, err := tea.NewProgram(model, programOptions...).Run(); err != nil {
+		fmt.Fprintln(stderr, "Error:", err)
+		return 1
 	}
+	return 0
 }

@@ -30,7 +30,7 @@ func (m Model) loadDiffCmd() tea.Cmd {
 	chromaStyle := GetTheme(theme).ChromaStyle
 	return func() tea.Msg {
 		var diff vcs.DiffMsg
-		if m.pipedDiff != "" {
+		if m.fromStdin {
 			diff.Content = m.vcs.ExtractFileDiff(m.pipedDiff, path)
 		} else {
 			msg := m.vcs.DiffCmd(m.targetBranch, path)()
@@ -53,6 +53,7 @@ func (m *Model) requestDiff() tea.Cmd {
 	m.diffRequest++
 	m.diffLoading = m.selectedPath != ""
 	m.diffLines, m.diffHighlighted, m.diffFileLines = nil, nil, nil
+	m.diffHunks, m.searchMatches = nil, nil
 	m.currentFileAdded, m.currentFileDeleted = 0, 0
 	m.diffNotice = ""
 	m.diffError = ""

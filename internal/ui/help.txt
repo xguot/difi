@@ -9,7 +9,26 @@ Run difi in any repository:
     difi                  diff against HEAD
     difi main             diff against a named branch
     difi HEAD~3           diff against N commits ago
+    difi -s               Git index against HEAD (staged)
+    difi -s main          Git index against main
+    difi -u               working tree against Git index (unstaged)
+    difi --no-untracked   exclude untracked files (Git and Mercurial)
+    difi -p -u            print unstaged file paths without opening the UI
     git diff | difi       pipe raw diff from stdin
+
+-s / --staged and -u / --unstaged are Git-only and cannot be combined.
+Unstaged mode takes no target. Staged mode never includes untracked files;
+other modes include them unless --no-untracked is set. Flags precede targets.
+Piped patches cannot be combined with scope flags or positional targets.
+An empty piped patch stays empty. Refresh uses the supplied patch in memory.
+
+Editors open working files. Editing in staged mode does not stage changes.
+
+Git editor environment:
+    DIFI_SCOPE     working, staged, or unstaged
+    DIFI_TARGET    target ref; empty for the unstaged index baseline
+
+Staged editor line numbers are mapped through any unstaged edits.
 
 difi is open source and freely distributable under the MIT license.
 
@@ -27,6 +46,26 @@ gg                       jump to the first line of the diff
 G                        jump to the last line of the diff
 :<number>                jump to line <number>
 :$                       jump to the last line
+
+]c / }                   next hunk's first changed line
+[c / {                   previous hunk's first changed line
+3]c                      move forward three hunks (no wrapping)
+
+> Search
+
+/ in tree               filter full file paths, including collapsed folders
+/ in diff               search the selected diff (literal, case insensitive)
+n / N                   next / previous matching diff line; wraps at ends
+5n                      move forward five matches
+Enter                   apply the filter or search
+Esc during input        restore the previous query and selection
+Esc in normal mode      clear the focused pane's filter or search
+Ctrl-u during input     clear the prompt
+
+Matching diff lines are underlined and marked with ◆. The footer counts
+matching lines. Filters and searches survive refresh; :noh clears search.
+
+In terminals narrower than 60 columns, only the focused pane is displayed.
 
 > Scrolling
 
@@ -94,7 +133,7 @@ Press : to open a vim-style command line at the bottom of the screen.
 :q, :quit                exit difi
 :w, :write               refresh files, statistics, and diff from disk
 :help, :h                open this help buffer
-:noh, :nohlsearch        clear visual selection highlight
+:noh, :nohlsearch        clear search and visual selection
 
 :<number>                jump to line <number> in the diff
 :$                       jump to the last line
@@ -184,6 +223,10 @@ zz / zt / zb    center / top / bottom scroll
 e / Enter       edit file at cursor line
 V               toggle visual selection mode
 f               toggle flat tree mode
+/               filter files (tree) or search diff (diff pane)
+n / N           next / previous matching line
+]c / [c         next / previous hunk (also } / {)
+Esc             clear the focused pane's filter or search
 Tab             toggle pane focus
 h / l           focus left / right pane
 ?               toggle quick help drawer
@@ -195,7 +238,7 @@ q / ZZ          quit
 :q / :quit      exit
 :w / :write     refresh files, statistics, and diff
 :help / :h      open this help
-:noh            clear visual highlight
+:noh            clear search and visual highlight
 :colorscheme    switch theme
 :theme          alias for :colorscheme
 :set            change a setting

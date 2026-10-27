@@ -7,6 +7,21 @@ retracted (tags deleted or never formally published) are marked accordingly.
 
 ---
 
+## [v0.3.0] — 2026-10-27
+
+- Add native `--staged` / `-s` and `--unstaged` / `-u` Git review scopes (#56)
+- Add `--no-untracked` for Git and Mercurial (#49), preserving existing defaults
+- Keep scoped file lists, diffs, statistics, editing, and refreshes on the same comparison
+- Add live, case-insensitive file path filtering with `/` in the file tree
+- Add literal diff search with `/`, matching-line markers, and wrapping `n` / `N` navigation
+- Add `]c` / `[c` and `}` / `{` hunk navigation, including Vim repeat counts
+- Preserve filters and searches through refreshes; cancel input without losing the previous selection
+- Support staged reviews before the first commit and show native rename metadata correctly
+- Map staged editor line numbers through unstaged edits and expose the comparison via `DIFI_SCOPE`
+- Support piped patches in `--plain` mode and keep empty patches separate from repository changes
+- Identify review scopes in the header and adapt narrow terminals to a single focused pane
+- Expand CLI, Git, Mercurial, and UI regression coverage and update all usage documentation
+
 ## [v0.2.32] — 2026-10-27
 
 - Fix piped Git diffs with mnemonic prefixes, no prefixes, quoted filenames, and renames (#55)

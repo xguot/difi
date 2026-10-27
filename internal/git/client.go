@@ -11,6 +11,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/xguot/difi/internal/patch"
+	"github.com/xguot/difi/internal/review"
 )
 
 // ansiRe matches ANSI escape sequences to strip or identify terminal styling.
@@ -55,14 +56,32 @@ func GetRepoName() string {
 }
 
 func ListChangedFiles(targetBranch string) ([]string, error) {
-	out, err := gitCmd("diff", "--no-relative", "--name-only", "-z", targetBranch, "--").Output()
+	return ListChangedFilesWithOptions(targetBranch, review.Options{})
+}
+
+func diffArgs(target string, options review.Options, flags ...string) []string {
+	args := append([]string{"diff", "--no-relative", "--no-ext-diff", "--no-textconv"}, flags...)
+	if options.Scope == review.Staged {
+		args = append(args, "--cached")
+	}
+	if options.Scope != review.Unstaged && !(options.Scope == review.Staged && target == "HEAD") {
+		args = append(args, target)
+	}
+	return append(args, "--")
+}
+
+func ListChangedFilesWithOptions(target string, options review.Options) ([]string, error) {
+	out, err := gitCmd(diffArgs(target, options, "--name-only", "-z")...).Output()
 	if err != nil {
 		return nil, err
 	}
 
-	untracked, err := gitCmd("ls-files", "--others", "--exclude-standard", "-z").Output()
-	if err != nil {
-		return nil, err
+	var untracked []byte
+	if options.IncludeUntracked() {
+		untracked, err = gitCmd("ls-files", "--others", "--exclude-standard", "-z").Output()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	seen := make(map[string]bool)
@@ -80,14 +99,33 @@ func ListChangedFiles(targetBranch string) ([]string, error) {
 }
 
 func DiffCmd(targetBranch, path string) tea.Cmd {
+	return DiffCmdWithOptions(targetBranch, path, review.Options{})
+}
+
+func DiffCmdWithOptions(targetBranch, path string, options review.Options) tea.Cmd {
 	return func() tea.Msg {
-		out, err := gitCmd("diff", "--no-relative", "--no-ext-diff", "--no-textconv", "--color=never", "--src-prefix=a/", "--dst-prefix=b/", targetBranch, "--", path).CombinedOutput()
+		args := append(diffArgs(targetBranch, options, "--color=never", "--src-prefix=a/", "--dst-prefix=b/"), path)
+		out, err := gitCmd(args...).CombinedOutput()
 		if err != nil {
 			return DiffMsg{Err: fmt.Errorf("git diff: %w: %s", err, strings.TrimSpace(string(out)))}
 		}
 
 		content := string(out)
-		if content == "" {
+		// Restricting a diff to the destination alone can hide a rename's
+		// source and render the destination as an entirely new file.
+		if strings.Contains(content, "\nnew file mode ") {
+			if source, err := renameSource(targetBranch, path, options); err != nil {
+				return DiffMsg{Err: err}
+			} else if source != "" {
+				args = append(diffArgs(targetBranch, options, "--color=never", "--src-prefix=a/", "--dst-prefix=b/"), source, path)
+				out, err = gitCmd(args...).CombinedOutput()
+				if err != nil {
+					return DiffMsg{Err: fmt.Errorf("git rename diff: %w: %s", err, strings.TrimSpace(string(out)))}
+				}
+				content = string(out)
+			}
+		}
+		if content == "" && options.IncludeUntracked() {
 			// Only untracked files need a synthetic addition. A tracked file
 			// restored during refresh must not appear as a full-file addition.
 			if err := gitCmd("ls-files", "--error-unmatch", "--", path).Run(); err != nil {
@@ -106,6 +144,13 @@ func DiffCmd(targetBranch, path string) tea.Cmd {
 }
 
 func OpenEditorCmd(path string, lineNumber int, targetBranch string, editor string) tea.Cmd {
+	return OpenEditorCmdWithOptions(path, lineNumber, targetBranch, editor, review.Options{})
+}
+
+func OpenEditorCmdWithOptions(path string, lineNumber int, targetBranch string, editor string, options review.Options) tea.Cmd {
+	if options.Scope == review.Staged && lineNumber > 0 {
+		lineNumber = workingTreeLine(path, lineNumber)
+	}
 	var args []string
 	if lineNumber > 0 {
 		args = append(args, fmt.Sprintf("+%d", lineNumber))
@@ -115,11 +160,45 @@ func OpenEditorCmd(path string, lineNumber int, targetBranch string, editor stri
 	c := exec.Command(editor, args...)
 	c.Dir = repoRoot()
 	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
-	c.Env = append(os.Environ(), fmt.Sprintf("DIFI_TARGET=%s", targetBranch))
+	c.Env = editorEnvironment(targetBranch, options)
 
 	return tea.ExecProcess(c, func(err error) tea.Msg {
 		return EditorFinishedMsg{Err: err}
 	})
+}
+
+func editorEnvironment(target string, options review.Options) []string {
+	scope := string(options.Scope)
+	if scope == "" {
+		scope = "working"
+	}
+	if options.Scope == review.Unstaged {
+		target = ""
+	}
+	return append(os.Environ(), "DIFI_TARGET="+target, "DIFI_SCOPE="+scope)
+}
+
+func renameSource(target, path string, options review.Options) (string, error) {
+	out, err := gitCmd(diffArgs(target, options, "--name-status", "-z")...).Output()
+	if err != nil {
+		return "", fmt.Errorf("git rename status: %w", err)
+	}
+	entries := strings.Split(string(out), "\x00")
+	for i := 0; i+1 < len(entries); {
+		status := entries[i]
+		if status != "" && (status[0] == 'R' || status[0] == 'C') {
+			if i+2 >= len(entries) {
+				break
+			}
+			if entries[i+2] == path {
+				return entries[i+1], nil
+			}
+			i += 3
+		} else {
+			i += 2
+		}
+	}
+	return "", nil
 }
 
 func DiffStats(targetBranch string) (added int, deleted int, err error) {
@@ -136,7 +215,11 @@ func DiffStats(targetBranch string) (added int, deleted int, err error) {
 }
 
 func DiffStatsByFile(targetBranch string) (map[string][2]int, error) {
-	cmd := gitCmd("diff", "--no-relative", "--numstat", "-z", targetBranch, "--")
+	return DiffStatsByFileWithOptions(targetBranch, review.Options{})
+}
+
+func DiffStatsByFileWithOptions(targetBranch string, options review.Options) (map[string][2]int, error) {
+	cmd := gitCmd(diffArgs(targetBranch, options, "--numstat", "-z")...)
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("git diff numstat error: %w", err)

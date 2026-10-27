@@ -7,11 +7,14 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/xguot/difi/internal/config"
 	"github.com/xguot/difi/internal/patch"
+	"github.com/xguot/difi/internal/review"
 	"github.com/xguot/difi/internal/tree"
 	"github.com/xguot/difi/internal/vcs"
 )
@@ -37,11 +40,26 @@ type StatsMsg struct {
 	ByFile  map[string][2]int
 }
 
+type Options struct {
+	Review    review.Options
+	FromStdin bool
+}
+
 type Model struct {
-	fileList     list.Model
-	treeState    *tree.FileTree
-	treeDelegate TreeDelegate
-	diffViewport viewport.Model
+	promptMode                 promptKind
+	promptInput                textinput.Model
+	promptOriginal, promptPath string
+	promptCursor, promptOffset int
+	fileFilter, searchQuery    string
+	searchMatches, diffHunks   []int
+	pendingHunk                string
+	pendingHunkCount           int
+	reviewOptions              review.Options
+	fromStdin                  bool
+	fileList                   list.Model
+	treeState                  *tree.FileTree
+	treeDelegate               TreeDelegate
+	diffViewport               viewport.Model
 
 	selectedPath  string
 	currentBranch string
@@ -101,12 +119,17 @@ type Model struct {
 	shouldQuit bool
 }
 
-func NewModel(cfg config.Config, targetBranch string, pipedDiff string, vcsClient vcs.VCS, flatMode bool, version string) Model {
+func NewModel(cfg config.Config, targetBranch string, pipedDiff string, vcsClient vcs.VCS, flatMode bool, version string, options ...Options) Model {
 	InitStyles(cfg)
+	var opts Options
+	if len(options) > 0 {
+		opts = options[0]
+	}
+	opts.FromStdin = opts.FromStdin || pipedDiff != ""
 
 	var files []string
 	var loadErr error
-	if pipedDiff != "" {
+	if opts.FromStdin {
 		files = vcsClient.ParseFilesFromDiff(pipedDiff)
 	} else {
 		files, loadErr = vcsClient.ListChangedFiles(targetBranch)
@@ -128,6 +151,8 @@ func NewModel(cfg config.Config, targetBranch string, pipedDiff string, vcsClien
 	l.DisableQuitKeybindings()
 
 	m := Model{
+		reviewOptions:  opts.Review,
+		fromStdin:      opts.FromStdin,
 		fileList:       l,
 		treeState:      t,
 		treeDelegate:   delegate,
@@ -172,7 +197,7 @@ func (m Model) Init() tea.Cmd {
 		cmds = append(cmds, m.loadDiffCmd())
 	}
 
-	if m.pipedDiff == "" {
+	if !m.fromStdin {
 		cmds = append(cmds, m.fetchStatsCmd(m.targetBranch))
 	} else {
 		cmds = append(cmds, m.computePipedStatsCmd())
@@ -209,16 +234,17 @@ func (m Model) computePipedStatsCmd() tea.Cmd {
 	}
 }
 
-func (m *Model) getRepeatCount() int {
-	if m.inputBuffer == "" {
-		return 1
-	}
+func (m *Model) consumeCount() int {
 	count, err := strconv.Atoi(m.inputBuffer)
-	if err != nil {
+	m.inputBuffer = ""
+	if err != nil || count < 1 {
 		return 1
 	}
-	m.inputBuffer = ""
-	return min(count, max(len(m.diffLines), len(m.fileList.Items())))
+	return count
+}
+
+func (m *Model) getRepeatCount() int {
+	return min(m.consumeCount(), max(1, max(len(m.diffLines), len(m.fileList.Items()))))
 }
 
 func stripAnsi(str string) string {
@@ -301,10 +327,8 @@ func (m *Model) centerDiffCursor() {
 }
 
 func (m *Model) updateSizes() {
-	reservedHeight := 1 // top bar only; command line replaces bottom when active
-	if m.showHelp {
-		reservedHeight += 12
-	}
+	m.promptInput.Width = max(1, m.width-12)
+	reservedHeight := 1 + lipgloss.Height(m.renderBottomBar())
 
 	contentHeight := m.height - reservedHeight
 	if contentHeight < 1 {
@@ -328,7 +352,11 @@ func (m *Model) updateSizes() {
 	}
 	m.fileList.SetSize(treeInnerWidth, listHeight)
 
-	m.diffViewport.Width = m.width - treeWidth
+	m.diffViewport.Width = max(1, m.width-treeWidth)
+	if m.width < 60 {
+		m.fileList.SetWidth(max(1, m.width-treePaneOverhead))
+		m.diffViewport.Width = max(1, m.width)
+	}
 	m.diffViewport.Height = listHeight
 }
 

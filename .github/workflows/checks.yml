@@ -39,6 +39,14 @@ jobs:
         run: |
           go build -mod=readonly -ldflags='-X main.version=0.0.0-check' -o "$RUNNER_TEMP/difi" ./cmd/difi
           test "$("$RUNNER_TEMP/difi" --version)" = 'difi version 0.0.0-check'
+      - name: Smoke test review scope flags and empty patches
+        run: |
+          "$RUNNER_TEMP/difi" --help > "$RUNNER_TEMP/difi-help.txt" 2>&1
+          grep -q -- '--unstaged' "$RUNNER_TEMP/difi-help.txt"
+          "$RUNNER_TEMP/difi" --plain --staged < /dev/null
+          "$RUNNER_TEMP/difi" --plain --unstaged --no-untracked < /dev/null
+          printf '' | "$RUNNER_TEMP/difi" --plain > "$RUNNER_TEMP/difi-empty.txt"
+          test ! -s "$RUNNER_TEMP/difi-empty.txt"
 
   cross-build:
     runs-on: ubuntu-latest

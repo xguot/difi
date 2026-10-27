@@ -3,6 +3,8 @@ package ui
 import (
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -11,6 +13,27 @@ import (
 )
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if key, ok := msg.(tea.KeyMsg); ok && m.promptMode == promptNone && !m.commandMode {
+		// Bracketed paste is text, not a sequence of normal-mode commands.
+		if key.Paste {
+			return m, nil
+		}
+		if key.Type == tea.KeyRunes && len(key.Runes) > 1 {
+			var commands []tea.Cmd
+			for _, r := range key.Runes {
+				quitting := m.promptMode == promptNone && !m.commandMode && !m.helpMode && (r == 'q' || (r == 'Z' && m.pendingZZ))
+				part := key
+				part.Runes = []rune{r}
+				next, cmd := m.Update(part)
+				m = next.(Model)
+				commands = append(commands, cmd)
+				if quitting {
+					break
+				}
+			}
+			return m, tea.Batch(commands...)
+		}
+	}
 	var cmd tea.Cmd
 	var cmds []tea.Cmd
 
@@ -28,6 +51,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.Err != nil {
 			m.errorText = msg.Err.Error()
+			m.updateSizes()
 			return m, nil
 		}
 		m.statsAdded = msg.Added
@@ -43,6 +67,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Err != nil {
 			m.diffLoading = false
 			m.errorText = msg.Err.Error()
+			m.updateSizes()
 			return m, nil
 		}
 		m.errorText = ""
@@ -51,11 +76,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.requestDiff()
 
 	case tea.KeyMsg:
+		if m.promptMode != promptNone {
+			return m, m.updatePrompt(msg)
+		}
 		// ── Command-line mode ──────────────────────────────────
 		if m.commandMode {
 			switch msg.String() {
 			case "esc", "ctrl+c":
 				m.commandMode = false
+				m.updateSizes()
 				m.commandBuffer = ""
 				m.resetTabCycle()
 				return m, nil
@@ -63,6 +92,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "enter":
 				quit, cmd := m.executeCommand()
 				m.commandMode = false
+				m.updateSizes()
 				m.commandBuffer = ""
 				if quit {
 					return m, tea.Quit
@@ -74,7 +104,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			case "backspace":
 				if len(m.commandBuffer) > 0 {
-					m.commandBuffer = m.commandBuffer[:len(m.commandBuffer)-1]
+					_, size := utf8.DecodeLastRuneInString(m.commandBuffer)
+					m.commandBuffer = m.commandBuffer[:len(m.commandBuffer)-size]
 				}
 				m.resetTabCycle()
 				return m, nil
@@ -84,9 +115,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 
 			default:
-				// Only accept printable single characters
-				if len(msg.String()) == 1 && msg.String() >= " " {
-					m.commandBuffer += msg.String()
+				if msg.Type == tea.KeyRunes {
+					for _, r := range msg.Runes {
+						if unicode.IsPrint(r) {
+							m.commandBuffer += string(r)
+						}
+					}
 					m.resetTabCycle()
 				}
 				return m, nil
@@ -148,7 +182,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// ── Normal mode keys ──────────────────────────────────
 		if msg.String() == ":" {
+			m.pendingHunk = ""
 			m.commandMode = true
+			m.updateSizes()
 			m.commandBuffer = ""
 			m.pendingZZ = false
 			m.resetTabCycle()
@@ -170,9 +206,41 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pendingZZ = false
 
 		if msg.String() == "?" {
+			m.pendingHunk = ""
 			m.showHelp = !m.showHelp
 			m.updateSizes()
 			return m, nil
+		}
+
+		if msg.String() == "/" {
+			return m, m.beginPrompt()
+		}
+		if msg.String() == "esc" && m.focus == FocusTree && m.fileFilter != "" {
+			m.fileFilter = ""
+			old := m.selectedPath
+			m.rebuildFileList(old)
+			m.updateSizes()
+			if old != m.selectedPath {
+				return m, m.requestDiff()
+			}
+			return m, nil
+		}
+		pending := m.pendingHunk
+		m.pendingHunk = ""
+		if (pending != "" && msg.String() == "c") || msg.String() == "]c" || msg.String() == "[c" {
+			if pending != "" {
+				m.inputBuffer = strconv.Itoa(m.pendingHunkCount)
+			}
+			direction := 1
+			if pending == "[" || msg.String() == "[c" {
+				direction = -1
+			}
+			m.jumpHunk(direction)
+			return m, nil
+		}
+		if msg.String() == "[" || msg.String() == "]" {
+			m.pendingHunk = msg.String()
+			m.pendingHunkCount = m.consumeCount()
 		}
 
 		if len(m.fileList.Items()) == 0 {
@@ -210,6 +278,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.inputBuffer = ""
 
 		case "esc":
+			m.searchQuery = ""
+			m.rebuildSearch()
+			m.updateSizes()
 			m.visualMode = false
 			m.inputBuffer = ""
 
@@ -260,16 +331,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.updateTreeFocus()
 			m.inputBuffer = ""
 
+		case "n", "N":
+			if m.focus == FocusDiff {
+				direction := 1
+				if msg.String() == "N" {
+					direction = -1
+				}
+				m.jumpSearch(direction)
+			} else {
+				m.inputBuffer = ""
+			}
+
+		case "}", "{":
+			direction := 1
+			if msg.String() == "{" {
+				direction = -1
+			}
+			m.jumpHunk(direction)
+
 		case "f":
 			if m.focus == FocusTree {
 				m.flatMode = !m.flatMode
-				m.fileList.SetItems(m.treeState.Items(m.flatMode))
-				for i, item := range m.fileList.Items() {
-					if ti, ok := item.(tree.TreeItem); ok && ti.FullPath == m.selectedPath {
-						m.fileList.Select(i)
-						break
-					}
-				}
+				m.rebuildFileList(m.selectedPath)
 				return m, nil
 			}
 
@@ -278,7 +361,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focus == FocusTree && msg.String() == "enter" {
 				if i, ok := m.fileList.SelectedItem().(tree.TreeItem); ok && i.IsDir {
 					m.treeState.ToggleExpand(i.FullPath)
-					m.fileList.SetItems(m.treeState.Items(m.flatMode))
+					m.fileList.SetItems(m.fileItems())
 					return m, nil
 				}
 			}
@@ -424,18 +507,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.diffLines, m.diffHighlighted, m.diffFileLines = msg.Lines, msg.Highlighted, msg.FileLines
 		m.currentFileAdded, m.currentFileDeleted = msg.Added, msg.Deleted
 		m.diffNotice = msg.Notice
+		m.diffHunks = hunkStarts(m.diffLines)
+		m.rebuildSearch()
+		m.updateSizes()
 		m.diffCursor = m.snapCursor(m.diffCursor, 1)
 		m.handleScrolling()
 
 	case vcs.EditorFinishedMsg:
 		if msg.Err != nil {
 			m.errorText = "Editor: " + msg.Err.Error()
+			m.updateSizes()
 			return m, nil
 		}
 		return m, m.refreshSession()
 
 	}
 
+	if m.promptMode != promptNone {
+		m.promptInput, cmd = m.promptInput.Update(msg)
+		cmds = append(cmds, cmd)
+	}
 	return m, tea.Batch(cmds...)
 }
 
@@ -468,6 +559,9 @@ func (m *Model) executeCommand() (bool, tea.Cmd) {
 	if cmd == "noh" || cmd == "nohlsearch" {
 		m.visualMode = false
 		m.visualStart = 0
+		m.searchQuery = ""
+		m.rebuildSearch()
+		m.updateSizes()
 		return false, nil
 	}
 

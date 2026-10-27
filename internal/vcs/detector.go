@@ -7,18 +7,19 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/xguot/difi/internal/git"
 	"github.com/xguot/difi/internal/hg"
+	"github.com/xguot/difi/internal/review"
 )
 
-type GitVCS struct{}
-type HgVCS struct{}
+type GitVCS struct{ Options review.Options }
+type HgVCS struct{ Options review.Options }
 
 func (g GitVCS) GetCurrentBranch() string { return git.GetCurrentBranch() }
 func (g GitVCS) GetRepoName() string      { return git.GetRepoName() }
 func (g GitVCS) ListChangedFiles(targetBranch string) ([]string, error) {
-	return git.ListChangedFiles(targetBranch)
+	return git.ListChangedFilesWithOptions(targetBranch, g.Options)
 }
 func (g GitVCS) DiffCmd(targetBranch, path string) tea.Cmd {
-	gitCmd := git.DiffCmd(targetBranch, path)
+	gitCmd := git.DiffCmdWithOptions(targetBranch, path, g.Options)
 	return func() tea.Msg {
 		msg := gitCmd()
 		if gitMsg, ok := msg.(git.DiffMsg); ok {
@@ -28,7 +29,7 @@ func (g GitVCS) DiffCmd(targetBranch, path string) tea.Cmd {
 	}
 }
 func (g GitVCS) OpenEditorCmd(path string, lineNumber int, targetBranch string, editor string) tea.Cmd {
-	gitCmd := git.OpenEditorCmd(path, lineNumber, targetBranch, editor)
+	gitCmd := git.OpenEditorCmdWithOptions(path, lineNumber, targetBranch, editor, g.Options)
 	return func() tea.Msg {
 		msg := gitCmd()
 		if gitMsg, ok := msg.(git.EditorFinishedMsg); ok {
@@ -38,10 +39,15 @@ func (g GitVCS) OpenEditorCmd(path string, lineNumber int, targetBranch string, 
 	}
 }
 func (g GitVCS) DiffStats(targetBranch string) (added int, deleted int, err error) {
-	return git.DiffStats(targetBranch)
+	byFile, err := g.DiffStatsByFile(targetBranch)
+	for _, counts := range byFile {
+		added += counts[0]
+		deleted += counts[1]
+	}
+	return added, deleted, err
 }
 func (g GitVCS) DiffStatsByFile(targetBranch string) (map[string][2]int, error) {
-	return git.DiffStatsByFile(targetBranch)
+	return git.DiffStatsByFileWithOptions(targetBranch, g.Options)
 }
 func (g GitVCS) CalculateFileLine(diffLines []string, visualLineIndex int) int {
 	return git.CalculateFileLine(diffLines, visualLineIndex)
@@ -54,7 +60,7 @@ func (g GitVCS) ExtractFileDiff(diffText, targetPath string) string {
 func (h HgVCS) GetCurrentBranch() string { return hg.GetCurrentBranch() }
 func (h HgVCS) GetRepoName() string      { return hg.GetRepoName() }
 func (h HgVCS) ListChangedFiles(targetBranch string) ([]string, error) {
-	return hg.ListChangedFiles(targetBranch)
+	return hg.ListChangedFilesWithOptions(targetBranch, h.Options.NoUntracked)
 }
 func (h HgVCS) DiffCmd(targetBranch, path string) tea.Cmd {
 	hgCmd := hg.DiffCmd(targetBranch, path)

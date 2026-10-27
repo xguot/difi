@@ -57,6 +57,10 @@ func GetRepoName() string {
 }
 
 func ListChangedFiles(target string) ([]string, error) {
+	return ListChangedFilesWithOptions(target, false)
+}
+
+func ListChangedFilesWithOptions(target string, noUntracked bool) ([]string, error) {
 	// m: modified, a: added, r: removed, d: deleted
 	out, err := hgCmd("status", "--rev", target, "-mard", "--no-status").Output()
 	if err != nil {
@@ -64,9 +68,12 @@ func ListChangedFiles(target string) ([]string, error) {
 	}
 
 	// u: unknown (untracked)
-	untracked, err := hgCmd("status", "--unknown", "--no-status").Output()
-	if err != nil {
-		return nil, err
+	var untracked []byte
+	if !noUntracked {
+		untracked, err = hgCmd("status", "--unknown", "--no-status").Output()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	seen := make(map[string]bool)

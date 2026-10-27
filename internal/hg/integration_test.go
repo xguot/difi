@@ -44,4 +44,8 @@ func TestWorkingTreeComparisonAndUntrackedFiles(t *testing.T) {
 	if err != nil || stats["file.go"] != [2]int{1, 1} {
 		t.Fatalf("wrong stats: %v, %v", stats, err)
 	}
+	files, err := ListChangedFilesWithOptions("tip", true)
+	if err != nil || len(files) != 1 || files[0] != "file.go" {
+		t.Fatalf("tracked-only scope: %q, %v", files, err)
+	}
 }

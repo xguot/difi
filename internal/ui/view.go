@@ -19,16 +19,7 @@ func (m Model) View() string {
 
 	topBar := m.renderTopBar()
 
-	var bottomBar string
-	if m.commandMode {
-		bottomBar = m.renderCmdLine()
-	} else if m.showHelp {
-		bottomBar = m.renderHelpDrawer()
-	} else if m.errorText != "" {
-		bottomBar = S.CmdLineStyle.Width(m.width).Render(ansi.Truncate("Error: "+strings.ReplaceAll(m.errorText, "\n", " "), m.width, "…"))
-	} else {
-		bottomBar = ""
-	}
+	bottomBar := m.renderBottomBar()
 
 	contentHeight := m.height - lipgloss.Height(topBar) - lipgloss.Height(bottomBar)
 	if contentHeight < 0 {
@@ -41,7 +32,10 @@ func (m Model) View() string {
 	if m.helpMode {
 		mainContent = m.renderHelpBuffer(m.width, contentHeight)
 	} else if len(m.fileList.Items()) == 0 {
-		message := "No changes found against " + m.targetBranch
+		message := m.emptyMessage()
+		if m.fileFilter != "" {
+			message = "No files matching /" + m.fileFilter + " · Esc clears the filter"
+		}
 		if m.errorText != "" {
 			message = "Unable to load changes: " + m.errorText
 		}
@@ -119,6 +113,10 @@ func (m Model) View() string {
 				}
 
 				separator := "│"
+				searchMatch := m.isSearchMatch(i)
+				if searchMatch {
+					separator = "◆"
+				}
 				if isCursor {
 					separator = "┃"
 				}
@@ -204,6 +202,9 @@ func (m Model) View() string {
 						}
 					}
 
+					if searchMatch {
+						hlCode = lipgloss.NewStyle().Underline(true).Render(hlCode)
+					}
 					hlCode = ansi.Truncate(hlCode, maxLineWidth-4, "")
 					line = gutter + hlCode
 				}
@@ -221,9 +222,42 @@ func (m Model) View() string {
 		}
 
 		mainContent = lipgloss.JoinHorizontal(lipgloss.Top, treeView, rightPaneView)
+		if m.width < 60 {
+			mainContent = treeView
+			if m.focus == FocusDiff {
+				mainContent = rightPaneView
+			}
+		}
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Top, topBar, mainContent, bottomBar)
+	view := lipgloss.JoinVertical(lipgloss.Top, topBar, mainContent, bottomBar)
+	lines := strings.Split(view, "\n")
+	if len(lines) > m.height {
+		lines = lines[:max(0, m.height)]
+	}
+	for i := range lines {
+		lines[i] = ansi.Truncate(lines[i], m.width, "")
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (m Model) renderBottomBar() string {
+	var bottomBar string
+	if m.promptMode != promptNone {
+		bottomBar = m.renderNavigationBar()
+	} else if m.commandMode {
+		bottomBar = m.renderCmdLine()
+	} else if m.showHelp {
+		bottomBar = m.renderHelpDrawer()
+	} else if m.errorText != "" {
+		bottomBar = S.CmdLineStyle.Width(m.width).Render(ansi.Truncate("Error: "+strings.ReplaceAll(m.errorText, "\n", " "), m.width, "…"))
+	} else if m.navigationStatus() != "" {
+		bottomBar = m.renderNavigationBar()
+	} else {
+		bottomBar = ""
+	}
+
+	return bottomBar
 }
 
 func (m Model) renderTopBar() string {
@@ -237,7 +271,7 @@ func (m Model) renderTopBar() string {
 		repoStats = fmt.Sprintf(" +%d -%d", m.statsAdded, m.statsDeleted)
 	}
 
-	info := fmt.Sprintf(" %s:%s  %s ➜ %s%s", m.repoName, vcsType, m.currentBranch, m.targetBranch, repoStats)
+	info := fmt.Sprintf(" %s:%s  %s%s", m.repoName, vcsType, m.comparisonLabel(), repoStats)
 	leftSide := S.TopInfoStyle.Render(info)
 
 	rightSide := ""
@@ -294,7 +328,7 @@ func (m Model) renderTopBar() string {
 	padding := strings.Repeat(" ", availWidth)
 	finalBar := lipgloss.JoinHorizontal(lipgloss.Top, leftSide, padding, rightSide)
 
-	return S.TopBarStyle.Width(m.width).Render(finalBar)
+	return S.TopBarStyle.Width(m.width).Render(ansi.Truncate(finalBar, m.width, ""))
 }
 
 // renderCmdLine renders a vim-style command-line at the bottom.
@@ -342,17 +376,20 @@ func (m Model) renderHelpDrawer() string {
 	)
 
 	edit := lipgloss.JoinVertical(lipgloss.Left,
-		S.HelpTextStyle.Render("e / Enter    Edit file at cursor"),
+		S.HelpTextStyle.Render("/            Filter files / search diff"),
+		S.HelpTextStyle.Render("n / N        Next / previous match"),
+		S.HelpTextStyle.Render("]c / [c      Next / previous hunk"),
+		S.HelpTextStyle.Render("e / Enter    Edit working file"),
 		S.HelpTextStyle.Render("V            Visual selection mode"),
 		S.HelpTextStyle.Render("f            Toggle flat tree mode"),
-		S.HelpTextStyle.Render("esc          Cancel visual mode"),
+		S.HelpTextStyle.Render("Esc          Clear filter / search"),
 	)
 
 	cmds := lipgloss.JoinVertical(lipgloss.Left,
 		S.HelpTextStyle.Render(":colorscheme Switch theme"),
 		S.HelpTextStyle.Render(":set <opt>   Change setting"),
-		S.HelpTextStyle.Render(":w           Refresh diff"),
-		S.HelpTextStyle.Render(":noh         Clear highlight"),
+		S.HelpTextStyle.Render(":w           Refresh review"),
+		S.HelpTextStyle.Render(":noh         Clear search / highlight"),
 		S.HelpTextStyle.Render(":<num>  :$   Jump to line"),
 		S.HelpTextStyle.Render(":help :h     This help"),
 	)
@@ -462,6 +499,13 @@ func (m Model) renderHelpBuffer(w, contentHeight int) string {
 }
 
 func (m Model) renderEmptyState(w, h int, statusMsg string) string {
+	if w < 60 || h < 16 {
+		text := ansi.Truncate(statusMsg, max(0, w), "…")
+		if h >= 3 {
+			text += "\n\n" + ansi.Truncate("/ search · :help · q quit", max(0, w), "…")
+		}
+		return lipgloss.Place(max(0, w), max(0, h), lipgloss.Center, lipgloss.Center, text)
+	}
 	t := ActiveTheme()
 
 	logo := S.EmptyLogoStyle.Render("difi")

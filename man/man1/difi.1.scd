@@ -9,7 +9,9 @@ difi - review and refine Git diffs before you push
 *difi* [options] [_target_]
 
 *difi* < _patch_
+
 *git diff* | *difi*
+
 *jj diff --git* | *difi*
 
 # DESCRIPTION
@@ -34,6 +36,17 @@ into *difi* from *git diff*, *jj diff --git*, or a patch file.
 *-f, --flat*
 	Use one-line file navigation in the tree pane instead of
 	a collapsible directory tree.
+
+*-s, --staged*
+	Review the Git index against HEAD, or against the supplied target.
+	Untracked files are excluded. Works before the first commit.
+
+*-u, --unstaged*
+	Review Git working files against the index. Takes no target.
+	Untracked files are included unless *--no-untracked* is set.
+
+*--no-untracked*
+	Exclude untracked files. Supported by Git and Mercurial.
 
 *--vcs* _string_
 	Force a specific VCS backend. Supported values: _git_, _hg_.
@@ -63,11 +76,32 @@ into *difi* from *git diff*, *jj diff --git*, or a patch file.
 *jj diff --git | difi*
 	Review Jujutsu changes through *difi*.
 
+## Review Scope
+
+The default comparison remains working files against HEAD, including untracked
+files. *--staged* and *--unstaged* are Git-only and cannot be combined. Put flags
+before the optional target. For example:
+
+```
+difi --staged main
+difi --unstaged --no-untracked
+difi --plain --staged
+```
+
+File lists, diffs, statistics, and refreshes use the selected scope. Editors
+always open working files; editing in staged mode does not stage the result.
+Difi does not stage or discard changes.
+
+A piped patch defines its own comparison and cannot be combined with a target
+or scope flags. *--plain* also accepts piped patches. Empty patches stay empty;
+refresh uses the supplied patch in memory.
+
 ## Panes
 
 The screen has two panes: the file tree (left) and the diff view (right).
 Press _Tab_ to toggle focus between them, or _h_ and _l_ to focus the
-left or right pane directly.
+left or right pane directly. Terminals narrower than 60 columns show only
+the focused pane.
 
 # KEY BINDINGS
 
@@ -99,6 +133,14 @@ left or right pane directly.
 :  Focus left pane (file tree)
 |  _l_, _Right_
 :  Focus right pane (diff view)
+|  _/_
+:  Filter paths in the tree or search text in the diff
+|  _n_, _N_
+:  Next / previous matching diff line, wrapping at the ends
+|  _]c_, _[c_, _}_, _{_
+:  Next / previous hunk; stops at the first and last hunk
+|  _Esc_
+:  Clear the focused pane's filter or search
 |  _?_
 :  Toggle quick help drawer
 |  _:_
@@ -118,6 +160,23 @@ left or right pane directly.
 :  Move selection up / down
 |  _f_
 :  Toggle flat mode (show full file paths, no tree)
+
+## Filtering and Search
+
+Press _/_ in the tree to filter full file paths. Matching is literal and case
+insensitive, including files in collapsed directories. Results show full paths.
+Press _Enter_ to keep the filter, or _Esc_ during input to restore the previous
+filter and selection. _Esc_ in the tree clears an applied filter. Filters survive
+refreshes.
+
+Press _/_ in the diff to search content lines. Matching is literal and case
+insensitive; hunk headers are excluded. Matching lines are underlined and marked
+with a diamond. The footer counts matching lines. _n_ and _N_ wrap forward and
+backward. _Esc_ cancels input or clears search; _:noh_ also clears it. _Ctrl-u_
+clears prompt input.
+
+Hunk navigation (_]c_ / _[c_, also _}_ / _{_) moves to the first changed line of
+each hunk. Vim counts are supported, such as _3]c_ or _5n_.
 
 ## Visual Mode
 
@@ -149,7 +208,7 @@ values. Press _Esc_ to cancel.
 |  _:help_, _:h_
 :  Open the full help buffer
 |  _:noh_, _:nohlsearch_
-:  Clear visual selection highlight
+:  Clear search and visual selection
 |  _:<number>_
 :  Jump to line <number> in the diff
 |  _:$_
@@ -286,6 +345,17 @@ _DIFI_EDITOR_
 
 _EDITOR_, _VISUAL_
 	Fallback editor, checked in order after _DIFI_EDITOR_.
+
+Git editor sessions also receive:
+
+_DIFI_SCOPE_
+	_working_, _staged_, or _unstaged_.
+
+_DIFI_TARGET_
+	The comparison target. Empty in unstaged mode, whose baseline is the index.
+
+Staged line positions are mapped through unstaged edits before opening the
+working file.
 
 # INTEGRATIONS
 
