@@ -145,7 +145,7 @@ values. Press _Esc_ to cancel.
 |  _:q_, _:quit_
 :  Exit difi
 |  _:w_, _:write_
-:  Refresh the diff view from disk
+:  Refresh files, statistics, and diff from disk
 |  _:help_, _:h_
 :  Open the full help buffer
 |  _:noh_, _:nohlsearch_

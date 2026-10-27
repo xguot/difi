@@ -4,28 +4,26 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/xguot/difi/internal/patch"
 )
 
-var hgRoot string
 var ansiRe = regexp.MustCompile("[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[a-zA-Z\\d]*)*)?\u0007)|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PRZcf-ntqry=><~]))")
 var hunkHeaderRe = regexp.MustCompile(`^.*?@@ \-\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@`)
 
 func getHgRoot() string {
-	if hgRoot != "" {
-		return hgRoot
-	}
 	cmd := exec.Command("hg", "root")
 	cmd.Env = append(os.Environ(), "HGRCPATH="+os.DevNull)
 	out, err := cmd.Output()
 	if err == nil {
-		hgRoot = strings.TrimSpace(string(out))
+		return strings.TrimSpace(string(out))
 	}
-	return hgRoot
+	return ""
 }
 
 func hgCmd(args ...string) *exec.Cmd {
@@ -87,17 +85,24 @@ func ListChangedFiles(target string) ([]string, error) {
 
 func DiffCmd(target, path string) tea.Cmd {
 	return func() tea.Msg {
-		out, err := hgCmd("diff", "--change", target, path).Output()
+		out, err := hgCmd("diff", "--git", "--rev", target, "--", path).CombinedOutput()
 		if err != nil {
-			return DiffMsg{Content: "Error: " + err.Error()}
+			return DiffMsg{Err: fmt.Errorf("hg diff: %w: %s", err, strings.TrimSpace(string(out)))}
 		}
 
 		content := string(out)
 		if content == "" {
-			if _, err := os.Stat(path); err == nil {
-				/* diff untracked file as full addition */
-				out, _ = exec.Command("hg", "diff", "--git", "/dev/null", path).Output()
-				content = string(out)
+			unknown, err := hgCmd("status", "--unknown", "--no-status", "-0", "--", path).Output()
+			if err != nil {
+				return DiffMsg{Err: fmt.Errorf("hg status: %w", err)}
+			}
+			if len(unknown) > 0 {
+				filePath := filepath.Join(getHgRoot(), filepath.FromSlash(path))
+				data, err := os.ReadFile(filePath)
+				if err != nil {
+					return DiffMsg{Err: err}
+				}
+				content = patch.Addition(path, data)
 			}
 		}
 		return DiffMsg{Content: content}
@@ -124,77 +129,26 @@ func OpenEditorCmd(path string, lineNumber int, targetBranch string, editor stri
 	})
 }
 
-func DiffStats(targetBranch string) (added int, deleted int, err error) {
-	var cmd *exec.Cmd
-	if targetBranch == "tip" || targetBranch == "." || targetBranch == "" {
-		cmd = hgCmd("diff", "--stat")
-	} else {
-		cmd = hgCmd("diff", "--rev", targetBranch, "--stat")
-	}
-
-	out, err := cmd.Output()
+func DiffStats(target string) (added int, deleted int, err error) {
+	byFile, err := DiffStatsByFile(target)
 	if err != nil {
-		return 0, 0, fmt.Errorf("hg diff stats error: %w", err)
+		return 0, 0, err
 	}
-
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	for _, line := range lines {
-		if strings.Contains(line, "changed") && (strings.Contains(line, "insertion") || strings.Contains(line, "deletion")) {
-			reAdded := regexp.MustCompile(`(\d+) insertion[s]?\(\+\)`)
-			if matches := reAdded.FindStringSubmatch(line); len(matches) > 1 {
-				if n, err := strconv.Atoi(matches[1]); err == nil {
-					added = n
-				}
-			}
-
-			reDeleted := regexp.MustCompile(`(\d+) deletion[s]?\(\-\)`)
-			if matches := reDeleted.FindStringSubmatch(line); len(matches) > 1 {
-				if n, err := strconv.Atoi(matches[1]); err == nil {
-					deleted = n
-				}
-			}
-			break
-		}
+	for _, counts := range byFile {
+		added += counts[0]
+		deleted += counts[1]
 	}
 	return added, deleted, nil
 }
 
-func DiffStatsByFile(targetBranch string) (map[string][2]int, error) {
-	var cmd *exec.Cmd
-	if targetBranch == "tip" || targetBranch == "." || targetBranch == "" {
-		cmd = hgCmd("diff", "--stat")
-	} else {
-		cmd = hgCmd("diff", "--rev", targetBranch, "--stat")
-	}
-
-	out, err := cmd.Output()
+func DiffStatsByFile(target string) (map[string][2]int, error) {
+	out, err := hgCmd("diff", "--git", "--rev", target).CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("hg diff stat error: %w", err)
+		return nil, fmt.Errorf("hg diff stats: %w: %s", err, strings.TrimSpace(string(out)))
 	}
-
 	result := make(map[string][2]int)
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	for _, line := range lines {
-		if strings.Contains(line, "changed") && (strings.Contains(line, "insertion") || strings.Contains(line, "deletion")) {
-			continue
-		}
-		pipeIdx := strings.LastIndex(line, "|")
-		if pipeIdx < 0 {
-			continue
-		}
-		filePath := strings.TrimSpace(line[:pipeIdx])
-		changesPart := strings.TrimSpace(line[pipeIdx+1:])
-		var a, d int
-		for _, ch := range changesPart {
-			if ch == '+' {
-				a++
-			} else if ch == '-' {
-				d++
-			}
-		}
-		if filePath != "" {
-			result[filePath] = [2]int{a, d}
-		}
+	for _, file := range patch.Parse(string(out)) {
+		result[file.Path] = [2]int{file.Added, file.Deleted}
 	}
 	return result, nil
 }
@@ -255,42 +209,16 @@ func stripAnsi(str string) string {
 	return ansiRe.ReplaceAllString(str, "")
 }
 
-type DiffMsg struct{ Content string }
+type DiffMsg struct {
+	Content string
+	Err     error
+}
 type EditorFinishedMsg struct{ Err error }
 
 func ParseFilesFromDiff(diffText string) []string {
-	var files []string
-	seen := make(map[string]bool)
-	lines := strings.Split(diffText, "\n")
-
-	for _, line := range lines {
-		if strings.HasPrefix(line, "diff -r ") {
-			parts := strings.Fields(line)
-			if len(parts) >= 3 {
-				file := parts[len(parts)-1]
-				if !seen[file] {
-					seen[file] = true
-					files = append(files, file)
-				}
-			}
-		}
-	}
-	return files
+	return patch.Paths(diffText)
 }
 
 func ExtractFileDiff(diffText, targetPath string) string {
-	lines := strings.Split(diffText, "\n")
-	var out []string
-	inTarget := false
-
-	for _, line := range lines {
-		if strings.HasPrefix(line, "diff -r ") {
-			parts := strings.Fields(line)
-			inTarget = len(parts) > 0 && parts[len(parts)-1] == targetPath
-		}
-		if inTarget {
-			out = append(out, line)
-		}
-	}
-	return strings.Join(out, "\n")
+	return patch.Extract(diffText, targetPath)
 }

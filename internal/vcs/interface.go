@@ -15,5 +15,8 @@ type VCS interface {
 	ExtractFileDiff(diffText, targetPath string) string
 }
 
-type DiffMsg struct{ Content string }
+type DiffMsg struct {
+	Content string
+	Err     error
+}
 type EditorFinishedMsg struct{ Err error }

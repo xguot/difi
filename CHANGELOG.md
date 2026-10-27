@@ -7,6 +7,22 @@ retracted (tags deleted or never formally published) are marked accordingly.
 
 ---
 
+## [v0.2.32] — 2026-10-27
+
+- Fix piped Git diffs with mnemonic prefixes, no prefixes, quoted filenames, and renames (#55)
+- Preserve whitespace and special characters in Git file lists and statistics
+- Resolve Git file paths from the repository root when launched in a subdirectory
+- Refresh the file tree, totals, and selected diff after editing or `:w`
+- Show repository, diff, and editor errors instead of misleading empty states
+- Load and highlight diffs asynchronously, ignoring outdated results during navigation
+- Fix counted Vim motions, command completion cycling, and absolute file line numbers
+- Refresh syntax highlighting immediately when changing themes
+- Show an explicit notice for binary and metadata-only changes
+- Compare Mercurial working files against the selected revision and display untracked files
+- Repair stale tests and add Git, Mercurial, parser, and UI regression coverage
+- Require race tests, vet, formatting, module checks, and platform builds before publishing
+- Validate complete semantic versions and publish release notes from this changelog
+
 ## [v0.2.31] — 2026-07-22
 
 - **Fix Homebrew upgrade path for users stuck on ghost version 0.2.30**
@@ -28,7 +44,7 @@ retracted (tags deleted or never formally published) are marked accordingly.
 - Add man page and bump embedded version
 
 > **Note:** v0.2.9 and v0.2.11 point to the same commit (0b9699d). Tags v0.2.10
-> and v0.2.12–v0.2.29 were never published. See the [retracted versions](#retracted-versions)
+> and v0.2.13–v0.2.29 were never published. See the [retracted versions](#retracted-versions)
 > section below.
 
 ## [v0.2.9] — 2026-06-27
@@ -199,7 +215,7 @@ The following version gaps exist intentionally:
 
 - **v0.2.10**: Never created — v0.2.11 was tagged directly from the v0.2.9
   commit to avoid a tag re-point conflict.
-- **v0.2.12–v0.2.29**: Never existed. The jump from v0.2.11 to v0.2.30 (and
+- **v0.2.13–v0.2.29**: Never existed. The jump from v0.2.11 to v0.2.30 (and
   back) was a local version-string increment that was never formalized as tags.
 
 ---
@@ -252,18 +268,21 @@ a git tag.
 ### Cutting a release
 
 1. Ensure all changes for the release are merged to `main`.
-2. Verify the CI is green on `main`.
-3. Tag the release:
+2. Update `CHANGELOG.md` with the version, date, and release notes, then commit it.
+3. Verify the checks are green on `main` (race tests, vet, formatting, modules, and platform builds).
+4. Tag the release:
    ```bash
    git tag -a vX.Y.Z -m "vX.Y.Z"
    git push origin vX.Y.Z
    ```
-4. CI runs `.github/workflows/release.yml`, which:
+5. CI runs `.github/workflows/release.yml`, which:
    - Verifies the source version is `"dev"` (guard)
-   - Validates the tag follows semver `vX.Y.Z` (guard)
+   - Validates the complete semver tag, including prerelease/build suffixes, and its changelog entry
    - Checks the tag has never been released before (guard)
-   - Builds binaries, creates a GitHub Release, and updates the Homebrew tap
-5. Update `CHANGELOG.md` with the new entry.
+   - Re-runs all checks before building release archives
+   - Builds binaries and creates a GitHub Release using the changelog entry
+6. Verify release archives, checksums, and the binary version. Homebrew core and AUR
+   updates are separate distribution steps; this workflow does not update a tap.
 
 ### Rules
 
@@ -276,4 +295,4 @@ a git tag.
   string stays `"dev"`.
 - **Protect `main` from force pushes** in GitHub repository settings:
   Settings → Branches → Add rule → Branch name pattern: `main`, enable
-  "Lock branch" and restrict force pushes.
+  required status checks and disable force pushes.

@@ -3,7 +3,7 @@ name: goreleaser
 on:
   push:
     tags:
-      - "*"
+      - "v*"
 
 permissions:
   contents: write
@@ -17,36 +17,36 @@ jobs:
 
       - name: Verify source version is "dev"
         run: |
-          VERSION_LINE=$(grep 'var version = ' cmd/difi/main.go)
-          if ! echo "$VERSION_LINE" | grep -q '"dev"'; then
-            echo "ERROR: cmd/difi/main.go contains a hardcoded version: $VERSION_LINE"
-            echo "The version string must be 'dev'. Versions are injected at build time from git tags."
-            exit 1
-          fi
-          echo "OK: version string is 'dev'"
+          grep -qx 'var version = "dev"' cmd/difi/main.go
 
-      - name: Validate tag is semver
+      - name: Validate tag and changelog
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          TAG="${{ github.ref_name }}"
-          if ! echo "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+'; then
-            echo "ERROR: tag '$TAG' does not match semver pattern vX.Y.Z"
-            exit 1
-          fi
-          echo "OK: tag '$TAG' is valid semver"
+          bash .github/scripts/validate-tag.sh "$RELEASE_TAG"
+          grep -Fq "## [$RELEASE_TAG]" CHANGELOG.md
 
       - name: Check tag has not been released before
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${{ github.ref_name }}"
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG")
-          if [ "$HTTP_CODE" = "200" ]; then
-            echo "ERROR: release for tag '$TAG' already exists. Tags must not be re-used or force-pushed."
-            exit 1
-          fi
-          echo "OK: tag '$TAG' has not been released before"
+          HTTP_CODE=$(curl -sS -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            "${{ github.api_url }}/repos/${{ github.repository }}/releases/tags/$RELEASE_TAG")
+          case "$HTTP_CODE" in
+            404) echo "OK: no existing release for $RELEASE_TAG" ;;
+            200) echo "ERROR: release already exists; tags must never be reused"; exit 1 ;;
+            *) echo "ERROR: GitHub returned HTTP $HTTP_CODE; cannot verify release uniqueness"; exit 1 ;;
+          esac
+
+  checks:
+    uses: ./.github/workflows/checks.yml
+    permissions:
+      contents: read
 
   goreleaser:
-    needs: guard
+    needs: [guard, checks]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -59,11 +59,22 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Extract release notes
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          awk -v tag="$RELEASE_TAG" '
+            index($0, "## [" tag "]") == 1 { found=1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > "$RUNNER_TEMP/release-notes.md"
+          test -s "$RUNNER_TEMP/release-notes.md"
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean
+          args: release --clean --release-notes=${{ runner.temp }}/release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

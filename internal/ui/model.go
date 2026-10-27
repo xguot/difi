@@ -11,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/xguot/difi/internal/config"
+	"github.com/xguot/difi/internal/patch"
 	"github.com/xguot/difi/internal/tree"
 	"github.com/xguot/difi/internal/vcs"
 )
@@ -29,6 +30,8 @@ var ansiRe = regexp.MustCompile("[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*
 var bgAnsiRe = regexp.MustCompile(`\x1b\[48;2;\d+;\d+;\d+m|\x1b\[4[0-9]m`)
 
 type StatsMsg struct {
+	Request uint64
+	Err     error
 	Added   int
 	Deleted int
 	ByFile  map[string][2]int
@@ -56,6 +59,13 @@ type Model struct {
 	diffContent     string
 	diffLines       []string
 	diffHighlighted []string
+	diffFileLines   []int
+	diffRequest     uint64
+	refreshRequest  uint64
+	diffLoading     bool
+	diffNotice      string
+	errorText       string
+	diffError       string
 	diffCursor      int
 	visualMode      bool
 	visualStart     int
@@ -82,11 +92,12 @@ type Model struct {
 	// Command-line mode (vim-style : prompt)
 	commandMode     bool
 	commandBuffer   string
-	tabCycleIndex   int    // tracks cycling position for tab completion
-	tabCyclePartial string // the partial that was being completed
+	tabCycleIndex   int // tracks cycling position for tab completion
+	tabCycleMatches []string
+	tabCyclePrefix  string
 
 	// ZZ quit (vim-style: press Z twice in normal mode to quit)
-	pendingZZ bool
+	pendingZZ  bool
 	shouldQuit bool
 }
 
@@ -94,10 +105,11 @@ func NewModel(cfg config.Config, targetBranch string, pipedDiff string, vcsClien
 	InitStyles(cfg)
 
 	var files []string
+	var loadErr error
 	if pipedDiff != "" {
 		files = vcsClient.ParseFilesFromDiff(pipedDiff)
 	} else {
-		files, _ = vcsClient.ListChangedFiles(targetBranch)
+		files, loadErr = vcsClient.ListChangedFiles(targetBranch)
 	}
 	t := tree.New(files)
 	items := t.Items(flatMode)
@@ -116,30 +128,36 @@ func NewModel(cfg config.Config, targetBranch string, pipedDiff string, vcsClien
 	l.DisableQuitKeybindings()
 
 	m := Model{
-		fileList:      l,
-		treeState:     t,
-		treeDelegate:  delegate,
-		diffViewport:  viewport.New(0, 0),
-		focus:         FocusTree,
-		currentBranch: vcsClient.GetCurrentBranch(),
-		targetBranch:  targetBranch,
-		repoName:      vcsClient.GetRepoName(),
-		showHelp:      false,
-		flatMode:      flatMode,
-		inputBuffer:   "",
-		pendingZ:      false,
-		pipedDiff:     pipedDiff,
-		vcs:           vcsClient,
-		version:       version,
-		visualMode:    false,
-		visualStart:   0,
-		commandMode:   false,
-		commandBuffer: "",
+		fileList:       l,
+		treeState:      t,
+		treeDelegate:   delegate,
+		diffViewport:   viewport.New(0, 0),
+		focus:          FocusTree,
+		currentBranch:  vcsClient.GetCurrentBranch(),
+		targetBranch:   targetBranch,
+		repoName:       vcsClient.GetRepoName(),
+		showHelp:       false,
+		flatMode:       flatMode,
+		inputBuffer:    "",
+		pendingZ:       false,
+		pipedDiff:      pipedDiff,
+		vcs:            vcsClient,
+		version:        version,
+		visualMode:     false,
+		visualStart:    0,
+		commandMode:    false,
+		commandBuffer:  "",
+		diffRequest:    1,
+		refreshRequest: 1,
+	}
+	if loadErr != nil {
+		m.errorText = loadErr.Error()
 	}
 
 	for idx, item := range items {
 		if ti, ok := item.(tree.TreeItem); ok && !ti.IsDir {
 			m.selectedPath = ti.FullPath
+			m.diffLoading = true
 			m.fileList.Select(idx)
 			break
 		}
@@ -151,13 +169,7 @@ func (m Model) Init() tea.Cmd {
 	var cmds []tea.Cmd
 
 	if m.selectedPath != "" {
-		if m.pipedDiff != "" {
-			cmds = append(cmds, func() tea.Msg {
-				return vcs.DiffMsg{Content: m.vcs.ExtractFileDiff(m.pipedDiff, m.selectedPath)}
-			})
-		} else {
-			cmds = append(cmds, m.vcs.DiffCmd(m.targetBranch, m.selectedPath))
-		}
+		cmds = append(cmds, m.loadDiffCmd())
 	}
 
 	if m.pipedDiff == "" {
@@ -171,12 +183,13 @@ func (m Model) Init() tea.Cmd {
 
 func (m Model) fetchStatsCmd(target string) tea.Cmd {
 	return func() tea.Msg {
-		added, deleted, err := m.vcs.DiffStats(target)
-		if err != nil {
-			return nil
+		byFile, err := m.vcs.DiffStatsByFile(target)
+		var added, deleted int
+		for _, stats := range byFile {
+			added += stats[0]
+			deleted += stats[1]
 		}
-		byFile, _ := m.vcs.DiffStatsByFile(target)
-		return StatsMsg{Added: added, Deleted: deleted, ByFile: byFile}
+		return StatsMsg{Request: m.refreshRequest, Added: added, Deleted: deleted, ByFile: byFile, Err: err}
 	}
 }
 
@@ -184,35 +197,15 @@ func (m Model) computePipedStatsCmd() tea.Cmd {
 	return func() tea.Msg {
 		byFile := make(map[string][2]int)
 		var totalAdded, totalDeleted int
-		var currentFile string
-
-		for _, line := range strings.Split(m.pipedDiff, "\n") {
-			clean := stripAnsi(line)
-			if strings.HasPrefix(clean, "diff --git ") {
-				parts := strings.Fields(clean)
-				if len(parts) >= 4 {
-					currentFile = strings.TrimPrefix(parts[3], "b/")
-				}
-			} else if strings.HasPrefix(clean, "diff -r ") {
-				parts := strings.Fields(clean)
-				if len(parts) >= 3 {
-					currentFile = parts[len(parts)-1]
-				}
-			} else if currentFile != "" {
-				if strings.HasPrefix(clean, "+") && !strings.HasPrefix(clean, "+++") {
-					s := byFile[currentFile]
-					s[0]++
-					byFile[currentFile] = s
-					totalAdded++
-				} else if strings.HasPrefix(clean, "-") && !strings.HasPrefix(clean, "---") {
-					s := byFile[currentFile]
-					s[1]++
-					byFile[currentFile] = s
-					totalDeleted++
-				}
-			}
+		for _, file := range patch.Parse(m.pipedDiff) {
+			s := byFile[file.Path]
+			s[0] += file.Added
+			s[1] += file.Deleted
+			byFile[file.Path] = s
+			totalAdded += file.Added
+			totalDeleted += file.Deleted
 		}
-		return StatsMsg{Added: totalAdded, Deleted: totalDeleted, ByFile: byFile}
+		return StatsMsg{Request: m.refreshRequest, Added: totalAdded, Deleted: totalDeleted, ByFile: byFile}
 	}
 }
 
@@ -225,7 +218,7 @@ func (m *Model) getRepeatCount() int {
 		return 1
 	}
 	m.inputBuffer = ""
-	return count
+	return min(count, max(len(m.diffLines), len(m.fileList.Items())))
 }
 
 func stripAnsi(str string) string {
@@ -233,16 +226,9 @@ func stripAnsi(str string) string {
 }
 
 func isDiffMetadata(cleanLine string) bool {
-	return strings.HasPrefix(cleanLine, "diff --git") ||
-		strings.HasPrefix(cleanLine, "diff -r ") ||
-		strings.HasPrefix(cleanLine, "index ") ||
-		strings.HasPrefix(cleanLine, "new file mode") ||
-		strings.HasPrefix(cleanLine, "old mode") ||
-		strings.HasPrefix(cleanLine, "--- a/") ||
-		strings.HasPrefix(cleanLine, "--- /dev/") ||
-		strings.HasPrefix(cleanLine, "+++ b/") ||
-		strings.HasPrefix(cleanLine, "+++ /dev/") ||
-		strings.HasPrefix(cleanLine, "@@")
+	// File headers have already been removed before the diff is rendered.
+	// A content line beginning with +++ or --- is still a changed line.
+	return strings.HasPrefix(cleanLine, "@@ ")
 }
 
 func isDiffContentLine(cleanLine string) bool {

@@ -22,7 +22,7 @@ func (g GitVCS) DiffCmd(targetBranch, path string) tea.Cmd {
 	return func() tea.Msg {
 		msg := gitCmd()
 		if gitMsg, ok := msg.(git.DiffMsg); ok {
-			return DiffMsg{Content: gitMsg.Content}
+			return DiffMsg{Content: gitMsg.Content, Err: gitMsg.Err}
 		}
 		return msg
 	}
@@ -61,7 +61,7 @@ func (h HgVCS) DiffCmd(targetBranch, path string) tea.Cmd {
 	return func() tea.Msg {
 		msg := hgCmd()
 		if hgMsg, ok := msg.(hg.DiffMsg); ok {
-			return DiffMsg{Content: hgMsg.Content}
+			return DiffMsg{Content: hgMsg.Content, Err: hgMsg.Err}
 		}
 		return msg
 	}

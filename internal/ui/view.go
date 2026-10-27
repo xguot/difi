@@ -24,6 +24,8 @@ func (m Model) View() string {
 		bottomBar = m.renderCmdLine()
 	} else if m.showHelp {
 		bottomBar = m.renderHelpDrawer()
+	} else if m.errorText != "" {
+		bottomBar = S.CmdLineStyle.Width(m.width).Render(ansi.Truncate("Error: "+strings.ReplaceAll(m.errorText, "\n", " "), m.width, "…"))
 	} else {
 		bottomBar = ""
 	}
@@ -39,7 +41,11 @@ func (m Model) View() string {
 	if m.helpMode {
 		mainContent = m.renderHelpBuffer(m.width, contentHeight)
 	} else if len(m.fileList.Items()) == 0 {
-		mainContent = m.renderEmptyState(m.width, contentHeight, "No changes found against "+m.targetBranch)
+		message := "No changes found against " + m.targetBranch
+		if m.errorText != "" {
+			message = "Unable to load changes: " + m.errorText
+		}
+		mainContent = m.renderEmptyState(m.width, contentHeight, message)
 	} else {
 		treeStyle := S.PaneStyle
 		if m.focus == FocusTree {
@@ -57,6 +63,12 @@ func (m Model) View() string {
 
 		if ok && selectedItem.IsDir {
 			rightPaneView = m.renderEmptyState(m.diffViewport.Width, contentHeight, "Directory: "+selectedItem.Name)
+		} else if m.diffError != "" {
+			rightPaneView = m.renderEmptyState(m.diffViewport.Width, contentHeight, "Unable to load diff: "+m.diffError)
+		} else if m.diffLoading {
+			rightPaneView = m.renderEmptyState(m.diffViewport.Width, contentHeight, "Loading diff…")
+		} else if m.diffNotice != "" {
+			rightPaneView = m.renderEmptyState(m.diffViewport.Width, contentHeight, m.diffNotice)
 		} else {
 			var renderedDiff strings.Builder
 
@@ -128,12 +140,12 @@ func (m Model) View() string {
 
 				if mode != "hidden" {
 					if isCursor && mode == "hybrid" {
-						realLine := m.vcs.CalculateFileLine(m.diffLines, m.diffCursor)
+						realLine := m.diffFileLines[m.diffCursor]
 						numStr = fmt.Sprintf("%d", realLine)
 					} else if isCursor && mode == "relative" {
 						numStr = "0"
 					} else if mode == "absolute" {
-						numStr = fmt.Sprintf("%d", i+1)
+						numStr = fmt.Sprintf("%d", m.diffFileLines[i])
 					} else {
 						dist := int(math.Abs(float64(i - m.diffCursor)))
 						numStr = fmt.Sprintf("%d", dist)
@@ -206,7 +218,7 @@ func (m Model) View() string {
 				Height(contentHeight).
 				MaxHeight(contentHeight).
 				Render(diffContentStr)
-			}
+		}
 
 		mainContent = lipgloss.JoinHorizontal(lipgloss.Top, treeView, rightPaneView)
 	}

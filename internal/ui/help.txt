@@ -92,7 +92,7 @@ Press : to open a vim-style command line at the bottom of the screen.
 > Commands
 
 :q, :quit                exit difi
-:w, :write               refresh the diff view from disk
+:w, :write               refresh files, statistics, and diff from disk
 :help, :h                open this help buffer
 :noh, :nohlsearch        clear visual selection highlight
 
@@ -193,7 +193,7 @@ q / ZZ          quit
 > Command Line (:)
 
 :q / :quit      exit
-:w / :write     refresh diff
+:w / :write     refresh files, statistics, and diff
 :help / :h      open this help
 :noh            clear visual highlight
 :colorscheme    switch theme

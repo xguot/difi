@@ -230,4 +230,3 @@ func TestDetectVCS_ErrorHandling(t *testing.T) {
 		}
 	}
 }
-

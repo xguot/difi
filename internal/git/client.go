@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/xguot/difi/internal/patch"
 )
 
 // ansiRe matches ANSI escape sequences to strip or identify terminal styling.
@@ -16,10 +18,19 @@ var ansiRe = regexp.MustCompile("[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*
 var hunkHeaderRe = regexp.MustCompile(`^@@ \-\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@`)
 
 func gitCmd(args ...string) *exec.Cmd {
-	fullArgs := append([]string{"--no-pager"}, args...)
+	fullArgs := append([]string{"--no-pager", "--literal-pathspecs"}, args...)
 	cmd := exec.Command("git", fullArgs...)
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	cmd.Dir = repoRoot()
 	return cmd
+}
+
+func repoRoot() string {
+	out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 func GetCurrentBranch() string {
@@ -44,12 +55,12 @@ func GetRepoName() string {
 }
 
 func ListChangedFiles(targetBranch string) ([]string, error) {
-	out, err := gitCmd("diff", "--name-only", targetBranch).Output()
+	out, err := gitCmd("diff", "--no-relative", "--name-only", "-z", targetBranch, "--").Output()
 	if err != nil {
 		return nil, err
 	}
 
-	untracked, err := gitCmd("ls-files", "--others", "--exclude-standard").Output()
+	untracked, err := gitCmd("ls-files", "--others", "--exclude-standard", "-z").Output()
 	if err != nil {
 		return nil, err
 	}
@@ -57,9 +68,8 @@ func ListChangedFiles(targetBranch string) ([]string, error) {
 	seen := make(map[string]bool)
 	var files []string
 
-	allOutput := string(out) + "\n" + string(untracked)
-	for _, line := range strings.Split(strings.TrimSpace(allOutput), "\n") {
-		f := strings.TrimSpace(line)
+	allOutput := string(out) + string(untracked)
+	for _, f := range strings.Split(allOutput, "\x00") {
 		if f != "" && !seen[f] {
 			seen[f] = true
 			files = append(files, f)
@@ -71,15 +81,22 @@ func ListChangedFiles(targetBranch string) ([]string, error) {
 
 func DiffCmd(targetBranch, path string) tea.Cmd {
 	return func() tea.Msg {
-		out, err := gitCmd("diff", "--color=always", targetBranch, "--", path).Output()
+		out, err := gitCmd("diff", "--no-relative", "--no-ext-diff", "--no-textconv", "--color=never", "--src-prefix=a/", "--dst-prefix=b/", targetBranch, "--", path).CombinedOutput()
 		if err != nil {
-			return DiffMsg{Content: "Error fetching diff: " + err.Error()}
+			return DiffMsg{Err: fmt.Errorf("git diff: %w: %s", err, strings.TrimSpace(string(out)))}
 		}
 
 		content := string(out)
 		if content == "" {
-			if _, err := os.Stat(path); err == nil {
-				out, _ = exec.Command("git", "diff", "--color=always", "--no-index", "/dev/null", path).Output()
+			// Only untracked files need a synthetic addition. A tracked file
+			// restored during refresh must not appear as a full-file addition.
+			if err := gitCmd("ls-files", "--error-unmatch", "--", path).Run(); err != nil {
+				out, err = gitCmd("diff", "--no-ext-diff", "--no-textconv", "--color=never", "--no-index", "--", os.DevNull, path).CombinedOutput()
+				if err != nil {
+					if exit, ok := err.(*exec.ExitError); !ok || exit.ExitCode() != 1 {
+						return DiffMsg{Err: fmt.Errorf("git diff untracked file: %w: %s", err, strings.TrimSpace(string(out)))}
+					}
+				}
 				content = string(out)
 			}
 		}
@@ -96,6 +113,7 @@ func OpenEditorCmd(path string, lineNumber int, targetBranch string, editor stri
 	args = append(args, path)
 
 	c := exec.Command(editor, args...)
+	c.Dir = repoRoot()
 	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
 	c.Env = append(os.Environ(), fmt.Sprintf("DIFI_TARGET=%s", targetBranch))
 
@@ -105,51 +123,30 @@ func OpenEditorCmd(path string, lineNumber int, targetBranch string, editor stri
 }
 
 func DiffStats(targetBranch string) (added int, deleted int, err error) {
-	cmd := gitCmd("diff", "--numstat", targetBranch)
-	out, err := cmd.Output()
+	byFile, err := DiffStatsByFile(targetBranch)
 	if err != nil {
 		return 0, 0, fmt.Errorf("git diff stats error: %w", err)
 	}
 
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	for _, line := range lines {
-		if line == "" {
-			continue
-		}
-		parts := strings.Fields(line)
-		if len(parts) < 2 {
-			continue
-		}
-
-		if parts[0] != "-" {
-			if n, err := strconv.Atoi(parts[0]); err == nil {
-				added += n
-			}
-		}
-		if parts[1] != "-" {
-			if n, err := strconv.Atoi(parts[1]); err == nil {
-				deleted += n
-			}
-		}
+	for _, stats := range byFile {
+		added += stats[0]
+		deleted += stats[1]
 	}
 	return added, deleted, nil
 }
 
 func DiffStatsByFile(targetBranch string) (map[string][2]int, error) {
-	cmd := gitCmd("diff", "--numstat", targetBranch)
+	cmd := gitCmd("diff", "--no-relative", "--numstat", "-z", targetBranch, "--")
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("git diff numstat error: %w", err)
 	}
 
 	result := make(map[string][2]int)
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	for _, line := range lines {
-		if line == "" {
-			continue
-		}
-		parts := strings.Fields(line)
-		if len(parts) < 3 {
+	entries := strings.Split(string(out), "\x00")
+	for i := 0; i < len(entries); i++ {
+		parts := strings.SplitN(entries[i], "\t", 3)
+		if len(parts) != 3 {
 			continue
 		}
 		var a, d int
@@ -159,11 +156,15 @@ func DiffStatsByFile(targetBranch string) (map[string][2]int, error) {
 		if parts[1] != "-" {
 			d, _ = strconv.Atoi(parts[1])
 		}
-		filePath := strings.Join(parts[2:], " ")
-		if idx := strings.LastIndex(filePath, " => "); idx != -1 {
-			filePath = filePath[idx+4:]
+		filePath := parts[2]
+		if filePath == "" && i+2 < len(entries) {
+			// In -z mode, renames encode old and new paths as separate fields.
+			filePath = entries[i+2]
+			i += 2
 		}
-		result[filePath] = [2]int{a, d}
+		if filePath != "" {
+			result[filepath.ToSlash(filePath)] = [2]int{a, d}
+		}
 	}
 	return result, nil
 }
@@ -225,42 +226,16 @@ func stripAnsi(str string) string {
 	return ansiRe.ReplaceAllString(str, "")
 }
 
-type DiffMsg struct{ Content string }
+type DiffMsg struct {
+	Content string
+	Err     error
+}
 type EditorFinishedMsg struct{ Err error }
 
 func ParseFilesFromDiff(diffText string) []string {
-	var files []string
-	seen := make(map[string]bool)
-	lines := strings.Split(diffText, "\n")
-
-	for _, line := range lines {
-		if strings.HasPrefix(line, "diff --git a/") {
-			parts := strings.SplitN(line, " b/", 2)
-			if len(parts) == 2 {
-				file := strings.TrimPrefix(parts[0], "diff --git a/")
-				if !seen[file] {
-					seen[file] = true
-					files = append(files, file)
-				}
-			}
-		}
-	}
-	return files
+	return patch.Paths(diffText)
 }
 
 func ExtractFileDiff(diffText, targetPath string) string {
-	lines := strings.Split(diffText, "\n")
-	var out []string
-	inTarget := false
-	targetHeader := fmt.Sprintf("diff --git a/%s b/%s", targetPath, targetPath)
-
-	for _, line := range lines {
-		if strings.HasPrefix(line, "diff --git ") {
-			inTarget = strings.HasPrefix(line, targetHeader)
-		}
-		if inTarget {
-			out = append(out, line)
-		}
-	}
-	return strings.Join(out, "\n")
+	return patch.Extract(diffText, targetPath)
 }

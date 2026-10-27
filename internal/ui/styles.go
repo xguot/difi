@@ -8,41 +8,41 @@ import (
 // Styles holds all lipgloss styles derived from the active theme.
 // Styles are rebuilt whenever the theme changes.
 type Styles struct {
-	PaneStyle         lipgloss.Style
-	FocusedPaneStyle  lipgloss.Style
-	TopBarStyle       lipgloss.Style
-	TopInfoStyle      lipgloss.Style
+	PaneStyle            lipgloss.Style
+	FocusedPaneStyle     lipgloss.Style
+	TopBarStyle          lipgloss.Style
+	TopInfoStyle         lipgloss.Style
 	TopStatsAddedStyle   lipgloss.Style
 	TopStatsDeletedStyle lipgloss.Style
-	DirectoryStyle    lipgloss.Style
-	FileStyle         lipgloss.Style
-	DiffStyle         lipgloss.Style
-	LineNumberStyle   lipgloss.Style
-	DiffAddGutter     lipgloss.Style
-	DiffDelGutter     lipgloss.Style
-	DiffCtxGutter     lipgloss.Style
-	DiffAddLineStyle  lipgloss.Style
-	DiffDelLineStyle  lipgloss.Style
-	CursorNormalStyle lipgloss.Style
-	CursorAddStyle    lipgloss.Style
-	CursorDelStyle    lipgloss.Style
-	EmptyLogoStyle    lipgloss.Style
-	EmptyDescStyle    lipgloss.Style
-	EmptyStatusStyle  lipgloss.Style
-	EmptyHeaderStyle  lipgloss.Style
-	EmptyCodeStyle    lipgloss.Style
-	HelpDrawerStyle   lipgloss.Style
-	HelpTextStyle     lipgloss.Style
-	StatusBarStyle    lipgloss.Style
-	StatusKeyStyle    lipgloss.Style
-	StatusRepoStyle   lipgloss.Style
-	StatusBranchStyle lipgloss.Style
-	StatusAddedStyle  lipgloss.Style
-	StatusDeletedStyle lipgloss.Style
-	StatusDividerStyle lipgloss.Style
-	CmdLineStyle      lipgloss.Style
-	CmdLinePrompt     lipgloss.Style
-	CmdLineCursor     lipgloss.Style
+	DirectoryStyle       lipgloss.Style
+	FileStyle            lipgloss.Style
+	DiffStyle            lipgloss.Style
+	LineNumberStyle      lipgloss.Style
+	DiffAddGutter        lipgloss.Style
+	DiffDelGutter        lipgloss.Style
+	DiffCtxGutter        lipgloss.Style
+	DiffAddLineStyle     lipgloss.Style
+	DiffDelLineStyle     lipgloss.Style
+	CursorNormalStyle    lipgloss.Style
+	CursorAddStyle       lipgloss.Style
+	CursorDelStyle       lipgloss.Style
+	EmptyLogoStyle       lipgloss.Style
+	EmptyDescStyle       lipgloss.Style
+	EmptyStatusStyle     lipgloss.Style
+	EmptyHeaderStyle     lipgloss.Style
+	EmptyCodeStyle       lipgloss.Style
+	HelpDrawerStyle      lipgloss.Style
+	HelpTextStyle        lipgloss.Style
+	StatusBarStyle       lipgloss.Style
+	StatusKeyStyle       lipgloss.Style
+	StatusRepoStyle      lipgloss.Style
+	StatusBranchStyle    lipgloss.Style
+	StatusAddedStyle     lipgloss.Style
+	StatusDeletedStyle   lipgloss.Style
+	StatusDividerStyle   lipgloss.Style
+	CmdLineStyle         lipgloss.Style
+	CmdLinePrompt        lipgloss.Style
+	CmdLineCursor        lipgloss.Style
 }
 
 var S *Styles

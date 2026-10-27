@@ -56,9 +56,9 @@ func TestCalculateFileLine(t *testing.T) {
  `
 
 	tests := []struct {
-		name              string
-		visualLineIndex   int
-		expectedLineNo    int
+		name            string
+		visualLineIndex int
+		expectedLineNo  int
 	}{
 		{
 			name:            "header line",
@@ -68,7 +68,7 @@ func TestCalculateFileLine(t *testing.T) {
 		{
 			name:            "hunk header",
 			visualLineIndex: 3,
-			expectedLineNo:  9,
+			expectedLineNo:  10,
 		},
 		{
 			name:            "context line",
@@ -78,7 +78,7 @@ func TestCalculateFileLine(t *testing.T) {
 		{
 			name:            "deleted line",
 			visualLineIndex: 5,
-			expectedLineNo:  10,
+			expectedLineNo:  11,
 		},
 		{
 			name:            "added line 1",
@@ -94,7 +94,7 @@ func TestCalculateFileLine(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := CalculateFileLine(diffContent, tt.visualLineIndex)
+			result := CalculateFileLine(strings.Split(diffContent, "\n"), tt.visualLineIndex)
 			if result != tt.expectedLineNo {
 				t.Errorf("CalculateFileLine(%d) = %d, want %d", tt.visualLineIndex, result, tt.expectedLineNo)
 			}

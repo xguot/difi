@@ -1,11 +1,9 @@
 package ui
 
 import (
-	"path/filepath"
 	"strconv"
 	"strings"
 
-	"github.com/alecthomas/chroma/v2/quick"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/xguot/difi/internal/tree"
@@ -25,11 +23,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateSizes()
 
 	case StatsMsg:
+		if msg.Request != m.refreshRequest {
+			return m, nil
+		}
+		if msg.Err != nil {
+			m.errorText = msg.Err.Error()
+			return m, nil
+		}
 		m.statsAdded = msg.Added
 		m.statsDeleted = msg.Deleted
 		if msg.ByFile != nil {
 			m.fileStats = msg.ByFile
 		}
+
+	case sessionMsg:
+		if msg.Request != m.refreshRequest {
+			return m, nil
+		}
+		if msg.Err != nil {
+			m.diffLoading = false
+			m.errorText = msg.Err.Error()
+			return m, nil
+		}
+		m.errorText = ""
+		m.statsAdded, m.statsDeleted, m.fileStats = msg.Stats.Added, msg.Stats.Deleted, msg.Stats.ByFile
+		m.replaceFiles(msg.Files)
+		return m, m.requestDiff()
 
 	case tea.KeyMsg:
 		// ── Command-line mode ──────────────────────────────────
@@ -320,7 +339,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "j", "down":
 			keyHandled = true
-			for i := 0; i < m.getRepeatCount(); i++ {
+			count := m.getRepeatCount()
+			for i := 0; i < count; i++ {
 				if m.focus == FocusDiff {
 					m.diffCursor = m.snapCursor(m.diffCursor+1, 1)
 					m.handleScrolling()
@@ -332,7 +352,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "k", "up":
 			keyHandled = true
-			for i := 0; i < m.getRepeatCount(); i++ {
+			count := m.getRepeatCount()
+			for i := 0; i < count; i++ {
 				if m.focus == FocusDiff {
 					m.diffCursor = m.snapCursor(m.diffCursor-1, -1)
 					m.handleScrolling()
@@ -383,102 +404,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.diffCursor = 0
 				m.visualMode = false
 				m.diffViewport.GotoTop()
-				if m.pipedDiff != "" {
-					cmds = append(cmds, func() tea.Msg {
-						return vcs.DiffMsg{Content: m.vcs.ExtractFileDiff(m.pipedDiff, m.selectedPath)}
-					})
-				} else {
-					cmds = append(cmds, m.vcs.DiffCmd(m.targetBranch, m.selectedPath))
-				}
+				cmds = append(cmds, m.requestDiff())
 			}
 		}
 	}
 
 	switch msg := msg.(type) {
-	case vcs.DiffMsg:
-		fullLines := strings.Split(msg.Content, "\n")
-		var cleanLines, hlLines []string
-		var added, deleted int
-		foundHunk := false
-
-		ext := filepath.Ext(m.selectedPath)
-		if len(ext) > 0 {
-			ext = ext[1:]
-		} else {
-			ext = "txt"
+	case diffResultMsg:
+		if msg.Request != m.diffRequest {
+			return m, nil
 		}
-
-		isGitTheme := m.treeDelegate.Config.UI.Theme == "git"
-
-		// Determine Chroma theme name from active ThemeColors
-		t := ActiveTheme()
-		chromaStyle := "nord"
-		if t != nil && !isGitTheme {
-			chromaStyle = t.ChromaStyle
+		m.diffLoading = false
+		if msg.Err != nil {
+			m.diffError = msg.Err.Error()
+			return m, nil
 		}
-
-		for _, line := range fullLines {
-			cleanLine := stripAnsi(line)
-
-			if strings.HasPrefix(cleanLine, "@@") {
-				foundHunk = true
-			}
-
-			if !foundHunk {
-				continue
-			}
-
-			cleanLines = append(cleanLines, line)
-
-			isAdd := strings.HasPrefix(cleanLine, "+") && !strings.HasPrefix(cleanLine, "+++")
-			isDel := strings.HasPrefix(cleanLine, "-") && !strings.HasPrefix(cleanLine, "---")
-
-			if isAdd {
-				added++
-			} else if isDel {
-				deleted++
-			}
-
-			codeContent := cleanLine
-			if len(codeContent) > 0 && (isAdd || isDel || strings.HasPrefix(codeContent, " ")) {
-				codeContent = codeContent[1:]
-			}
-
-			if isGitTheme {
-				hlLines = append(hlLines, codeContent)
-			} else {
-				var buf strings.Builder
-				err := quick.Highlight(&buf, codeContent, ext, "terminal16m", chromaStyle)
-				if err == nil && buf.String() != "" {
-					hlLines = append(hlLines, strings.TrimSuffix(buf.String(), "\n"))
-				} else {
-					hlLines = append(hlLines, codeContent)
-				}
-			}
-		}
-
-		for len(cleanLines) > 0 {
-			lastLine := strings.TrimRight(stripAnsi(cleanLines[len(cleanLines)-1]), "\r")
-			if lastLine != "" {
-				break
-			}
-			cleanLines = cleanLines[:len(cleanLines)-1]
-			hlLines = hlLines[:len(hlLines)-1]
-		}
-
-		m.diffLines = cleanLines
-		m.diffHighlighted = hlLines
-		m.currentFileAdded = added
-		m.currentFileDeleted = deleted
-		m.diffCursor = m.snapCursor(0, 1)
+		m.diffError = ""
+		m.diffContent = msg.Content
+		m.diffLines, m.diffHighlighted, m.diffFileLines = msg.Lines, msg.Highlighted, msg.FileLines
+		m.currentFileAdded, m.currentFileDeleted = msg.Added, msg.Deleted
+		m.diffNotice = msg.Notice
+		m.diffCursor = m.snapCursor(m.diffCursor, 1)
+		m.handleScrolling()
 
 	case vcs.EditorFinishedMsg:
-		if m.pipedDiff != "" {
-			return m, func() tea.Msg {
-				return vcs.DiffMsg{Content: m.vcs.ExtractFileDiff(m.pipedDiff, m.selectedPath)}
-			}
+		if msg.Err != nil {
+			m.errorText = "Editor: " + msg.Err.Error()
+			return m, nil
 		}
-		return m, m.vcs.DiffCmd(m.targetBranch, m.selectedPath)
+		return m, m.refreshSession()
+
 	}
 
 	return m, tea.Batch(cmds...)
@@ -500,18 +455,7 @@ func (m *Model) executeCommand() (bool, tea.Cmd) {
 
 	// :w / :write — refresh the diff view
 	if cmd == "w" || cmd == "write" {
-		if m.selectedPath == "" {
-			return false, nil
-		}
-		var refreshCmd tea.Cmd
-		if m.pipedDiff != "" {
-			refreshCmd = func() tea.Msg {
-				return vcs.DiffMsg{Content: m.vcs.ExtractFileDiff(m.pipedDiff, m.selectedPath)}
-			}
-		} else {
-			refreshCmd = m.vcs.DiffCmd(m.targetBranch, m.selectedPath)
-		}
-		return false, refreshCmd
+		return false, m.refreshSession()
 	}
 
 	// :help / :h — open the full help buffer
@@ -537,7 +481,8 @@ func (m *Model) executeCommand() (bool, tea.Cmd) {
 		cfg.UI.Theme = name
 		m.treeDelegate.Config = cfg
 		ReinitStyles(cfg)
-		return false, nil
+		m.updateTreeFocus()
+		return false, m.requestDiff()
 	}
 
 	// :theme <name> — alias for :colorscheme
@@ -550,7 +495,8 @@ func (m *Model) executeCommand() (bool, tea.Cmd) {
 		cfg.UI.Theme = name
 		m.treeDelegate.Config = cfg
 		ReinitStyles(cfg)
-		return false, nil
+		m.updateTreeFocus()
+		return false, m.requestDiff()
 	}
 
 	// :set <option> — live config changes
@@ -613,107 +559,35 @@ var setOptionNames = []string{
 // (e.g. :colorscheme gr → :colorscheme gruvbox). Repeated Tab cycles through
 // all matches; typing resets the cycle.
 func (m *Model) tabComplete() {
-	// Detect which prefix we're completing under
-	var prefix, partial string
-	switch {
-	case strings.HasPrefix(m.commandBuffer, "colorscheme "):
-		prefix = "colorscheme "
-		partial = strings.TrimPrefix(m.commandBuffer, "colorscheme ")
-		m.cycleThemeNames(prefix, partial)
-		return
-	case strings.HasPrefix(m.commandBuffer, "theme "):
-		prefix = "theme "
-		partial = strings.TrimPrefix(m.commandBuffer, "theme ")
-		m.cycleThemeNames(prefix, partial)
-		return
-	case strings.HasPrefix(m.commandBuffer, "set "):
-		prefix = "set "
-		partial = strings.TrimPrefix(m.commandBuffer, "set ")
-		m.cycleSetOptions(prefix, partial)
-		return
-	default:
-		// Completing command name itself (e.g. :col → :colorscheme)
-		m.cycleCommandNames()
-		return
-	}
-}
-
-// cycleThemeNames cycles through matching theme names for tab completion.
-func (m *Model) cycleThemeNames(prefix, partial string) {
-
-	names := ThemeNames()
-
-	// Collect all matching names
-	var matches []string
-	for _, name := range names {
-		if strings.HasPrefix(name, partial) {
-			matches = append(matches, name)
+	if len(m.tabCycleMatches) == 0 {
+		partial := m.commandBuffer
+		names := commandNames
+		prefix := ""
+		switch {
+		case strings.HasPrefix(partial, "colorscheme "):
+			prefix, names = "colorscheme ", ThemeNames()
+		case strings.HasPrefix(partial, "theme "):
+			prefix, names = "theme ", ThemeNames()
+		case strings.HasPrefix(partial, "set "):
+			prefix, names = "set ", setOptionNames
 		}
-	}
-	if len(matches) == 0 {
-		return
-	}
-
-	// If the partial changed (user typed), reset cycle
-	if partial != m.tabCyclePartial {
-		m.tabCycleIndex = 0
-		m.tabCyclePartial = partial
-	}
-
-	// Cycle to next match
-	idx := m.tabCycleIndex % len(matches)
-	m.commandBuffer = prefix + matches[idx]
-	m.tabCycleIndex = idx + 1
-}
-
-// cycleCommandNames cycles through matching command names (e.g. :col → :colorscheme).
-func (m *Model) cycleCommandNames() {
-	partial := m.commandBuffer
-
-	var matches []string
-	for _, name := range commandNames {
-		if strings.HasPrefix(name, partial) {
-			matches = append(matches, name)
+		partial = strings.TrimPrefix(partial, prefix)
+		for _, name := range names {
+			if strings.HasPrefix(name, partial) {
+				m.tabCycleMatches = append(m.tabCycleMatches, name)
+			}
 		}
+		m.tabCyclePrefix = prefix
 	}
-	if len(matches) == 0 {
+	if len(m.tabCycleMatches) == 0 {
 		return
 	}
-
-	if partial != m.tabCyclePartial {
-		m.tabCycleIndex = 0
-		m.tabCyclePartial = partial
-	}
-
-	idx := m.tabCycleIndex % len(matches)
-	m.commandBuffer = matches[idx]
-	m.tabCycleIndex = idx + 1
+	m.commandBuffer = m.tabCyclePrefix + m.tabCycleMatches[m.tabCycleIndex%len(m.tabCycleMatches)]
+	m.tabCycleIndex++
 }
 
-// cycleSetOptions cycles through matching :set option names.
-func (m *Model) cycleSetOptions(prefix, partial string) {
-	var matches []string
-	for _, name := range setOptionNames {
-		if strings.HasPrefix(name, partial) {
-			matches = append(matches, name)
-		}
-	}
-	if len(matches) == 0 {
-		return
-	}
-
-	if partial != m.tabCyclePartial {
-		m.tabCycleIndex = 0
-		m.tabCyclePartial = partial
-	}
-
-	idx := m.tabCycleIndex % len(matches)
-	m.commandBuffer = prefix + matches[idx]
-	m.tabCycleIndex = idx + 1
-}
-
-// resetTabCycle resets tab-completion state (called when user edits the buffer).
 func (m *Model) resetTabCycle() {
 	m.tabCycleIndex = 0
-	m.tabCyclePartial = ""
+	m.tabCycleMatches = nil
+	m.tabCyclePrefix = ""
 }

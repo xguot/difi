@@ -1,0 +1,56 @@
+name: checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install Mercurial for integration tests
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y mercurial
+      - name: Check formatting
+        run: test -z "$(gofmt -l cmd internal)"
+      - name: Check module files
+        run: go mod tidy -diff
+      - name: Validate release tag rules
+        run: bash .github/scripts/test-validate-tag.sh
+      - name: Test with race detection
+        run: go test -mod=readonly -race ./...
+      - name: Vet
+        run: go vet -mod=readonly ./...
+      - name: Verify built version
+        run: |
+          go build -mod=readonly -ldflags='-X main.version=0.0.0-check' -o "$RUNNER_TEMP/difi" ./cmd/difi
+          test "$("$RUNNER_TEMP/difi" --version)" = 'difi version 0.0.0-check'
+
+  cross-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build release platforms
+        env:
+          CGO_ENABLED: '0'
+        run: |
+          for platform in darwin/amd64 darwin/arm64 linux/386 linux/amd64 linux/arm64 windows/386 windows/amd64 windows/arm64; do
+            GOOS="${platform%/*}" GOARCH="${platform#*/}" go build -mod=readonly -trimpath -o "$RUNNER_TEMP/difi-${platform/\//-}" ./cmd/difi
+          done

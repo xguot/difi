@@ -54,7 +54,7 @@ pikaur -S difi
 
 ## Workflow
 
-Run difi in any Git repository against main:
+Run difi in any Git repository against HEAD:
 
 ```bash
 cd my-project
@@ -133,7 +133,7 @@ Press `:` to open a vim-style command line at the bottom of the screen. Availabl
 | `:colorscheme <name>`      | Switch to a different theme                 |
 | `:theme <name>`            | Alias for `:colorscheme`                    |
 | `:set <option>`            | Change a setting live (e.g. `:set number`)  |
-| `:w`, `:write`             | Refresh the diff view                       |
+| `:w`, `:write`             | Refresh files, statistics, and diff          |
 | `:help`, `:h`              | Toggle the help drawer                      |
 | `:noh`, `:nohlsearch`      | Clear visual selection highlight            |
 | `:<number>`                | Jump to line N in the diff                  |

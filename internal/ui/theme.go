@@ -1,6 +1,9 @@
 package ui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"github.com/charmbracelet/lipgloss"
+	"sort"
+)
 
 // ThemeColors holds the semantic color slots that define a complete UI theme.
 // Each slot maps to a specific UI element. Preset themes fill these from
@@ -18,8 +21,8 @@ type ThemeColors struct {
 	DimFg lipgloss.Color
 
 	// Pane borders
-	Border         lipgloss.Color
-	FocusedBorder  lipgloss.Color
+	Border        lipgloss.Color
+	FocusedBorder lipgloss.Color
 
 	// Diff gutter symbols (+, -, space)
 	AddGutter lipgloss.Color
@@ -47,10 +50,10 @@ type ThemeColors struct {
 	StatusBarFg lipgloss.Color
 
 	// Status bar accent colors for repo name, branch, stats
-	StatusRepoFg   lipgloss.Color
-	StatusBranchFg lipgloss.Color
-	StatusAddFg    lipgloss.Color
-	StatusDelFg    lipgloss.Color
+	StatusRepoFg    lipgloss.Color
+	StatusBranchFg  lipgloss.Color
+	StatusAddFg     lipgloss.Color
+	StatusDelFg     lipgloss.Color
 	StatusDividerFg lipgloss.Color
 
 	// File tree
@@ -82,23 +85,23 @@ func (t *ThemeColors) DefaultDelBg() string {
 
 // themeRegistry maps user-facing theme names (from config.yaml) to ThemeColors.
 var themeRegistry = map[string]*ThemeColors{
-	"nord":               nord,
-	"gruvbox":            gruvbox,
-	"catppuccin-mocha":   catppuccinMocha,
-	"catppuccin-latte":   catppuccinLatte,
-	"dracula":            dracula,
-	"monokai":            monokai,
-	"onedark":            onedark,
-	"github":             githubLight,
-	"github-dark":        githubDark,
-	"rose-pine":          rosePine,
-	"rose-pine-dawn":     rosePineDawn,
-	"solarized-dark":     solarizedDark,
-	"tokyonight-night":   tokyonightNight,
-	"tokyonight-storm":   tokyonightStorm,
-	"evergarden":         evergarden,
-	"doom-one":           doomOne,
-	"quiet":              quiet,
+	"nord":             nord,
+	"gruvbox":          gruvbox,
+	"catppuccin-mocha": catppuccinMocha,
+	"catppuccin-latte": catppuccinLatte,
+	"dracula":          dracula,
+	"monokai":          monokai,
+	"onedark":          onedark,
+	"github":           githubLight,
+	"github-dark":      githubDark,
+	"rose-pine":        rosePine,
+	"rose-pine-dawn":   rosePineDawn,
+	"solarized-dark":   solarizedDark,
+	"tokyonight-night": tokyonightNight,
+	"tokyonight-storm": tokyonightStorm,
+	"evergarden":       evergarden,
+	"doom-one":         doomOne,
+	"quiet":            quiet,
 }
 
 // GetTheme returns the ThemeColors for a given name.
@@ -116,6 +119,7 @@ func ThemeNames() []string {
 	for name := range themeRegistry {
 		names = append(names, name)
 	}
+	sort.Strings(names)
 	return names
 }
 
