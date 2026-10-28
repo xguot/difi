@@ -22,33 +22,6 @@ retracted (tags deleted or never formally published) are marked accordingly.
 - Identify review scopes in the header and adapt narrow terminals to a single focused pane
 - Expand CLI, Git, Mercurial, and UI regression coverage and update all usage documentation
 
-## [v0.2.32] — 2026-10-27
-
-- Fix piped Git diffs with mnemonic prefixes, no prefixes, quoted filenames, and renames (#55)
-- Preserve whitespace and special characters in Git file lists and statistics
-- Resolve Git file paths from the repository root when launched in a subdirectory
-- Refresh the file tree, totals, and selected diff after editing or `:w`
-- Show repository, diff, and editor errors instead of misleading empty states
-- Load and highlight diffs asynchronously, ignoring outdated results during navigation
-- Fix counted Vim motions, command completion cycling, and absolute file line numbers
-- Refresh syntax highlighting immediately when changing themes
-- Show an explicit notice for binary and metadata-only changes
-- Compare Mercurial working files against the selected revision and display untracked files
-- Repair stale tests and add Git, Mercurial, parser, and UI regression coverage
-- Require race tests, vet, formatting, module checks, and platform builds before publishing
-- Validate complete semantic versions and publish release notes from this changelog
-
-## [v0.2.31] — 2026-07-22
-
-- **Fix Homebrew upgrade path for users stuck on ghost version 0.2.30**
-- Make git tag the single source of truth for version (source always `"dev"`)
-- Inject version at build time via `git describe --tags` in Makefile
-- Add CI guard: block release if source version is hardcoded
-- Add CI guard: block release on semver mismatch or duplicate tag
-- Add CI guard: verify version injection on every PR
-- Add CHANGELOG.md with full release history and maintainer docs
-- Document release process and branch protection rules
-
 ## [v0.2.12] — 2026-07-17
 
 - Fix ActiveTheme not respecting configured theme at startup (PR #52)
@@ -204,6 +177,18 @@ retracted (tags deleted or never formally published) are marked accordingly.
 
 ## Retracted Versions
 
+### v0.2.31 and v0.2.32 — withdrawn 2026-10-28
+
+The GitHub releases and Git tags for these versions were removed at the
+maintainer's request because their version numbers were inconsistent.
+
+- **v0.2.31** was published on 2026-07-22 from commit `7657190` (version injection
+  and release guardrails).
+- **v0.2.32** was published on 2026-10-27 from commit `d6e250a` (reliability fixes).
+
+The code changes remain in the repository and are included in **v0.3.0**.
+The withdrawn version numbers are retired and must not be reused.
+
 ### v0.2.30 (ghost version) — 2026-07-06
 
 On 2026-07-06, two commits landed on `main` that set the embedded version string
@@ -221,8 +206,9 @@ commits were on `main` (via `go install`, `brew install --HEAD`, or a
 Homebrew formula bump) has a binary that reports version `0.2.30`. Homebrew
 refuses to upgrade because `0.2.30 > 0.2.12`.
 
-**Resolution:** Release v0.2.31 skips past the ghost version so `brew upgrade`
-works automatically. Affected users don't need to reinstall manually.
+**Resolution:** The initial workaround was v0.2.31, which has since been
+withdrawn. Release v0.3.0 supersedes the ghost version and both withdrawn
+releases. Use a distribution package or release binary at v0.3.0 or later.
 
 ### Missing Tags
 
@@ -305,7 +291,7 @@ a git tag.
   that have been pushed. Force-pushing to `main` orphans commits that users
   may have already installed.
 - **Never force-push over an existing tag.** Tags are immutable. If a release
-  is broken, cut a new patch version (e.g., `v0.2.13`) instead.
+  is broken, cut a new patch version (e.g., `v0.3.1`) instead.
 - **Never hardcode a version in `main.go`.** PR CI enforces that the version
   string stays `"dev"`.
 - **Protect `main` from force pushes** in GitHub repository settings:
